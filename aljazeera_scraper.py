@@ -161,23 +161,53 @@ def scroll_and_load_more(driver, target_date, max_scrolls=500):
 
     logging.info("Finished scrolling.")
 
-def parse_article_page(driver, url: str): 
+def parse_full_article(driver, url: str): 
     """Visit an individual article page and extract full content."""
     try: 
         driver.get(url)
         time.sleep(2) 
 
         soup = BeautifulSoup(driver.page_source, "html.parser")
+        # If the page lacks standard article text, check if it's a menu/gateway page
+        if not soup.select('.wysiwyg p'):
+            try: 
+                # Find the link
+                article_link = driver.find_element(By.CSS_SELECTOR, ".article-card a")
+                # Click the link
+                driver.execute_script("arguments[0].click();", article_link)
+                time.sleep(2)
+                # Update soup and page_content for the new page
+                soup = BeautifulSoup(driver.page_source, "html.parser")
+            except NoSuchElementException:
+                pass
+
         page_content = soup.find('main')
-        
         if not page_content:
             return None
-
+        
+        # article topics
         page_topics = [topic.text for topic in page_content.select('.breadcrumbs a')]
+
+        # article publisher
         publisher_el = page_content.select_one('.contributors-list--byline a')
         publisher = publisher_el.get_text(strip=True) if publisher_el else "Al Jazeera Staff"
+
+        # article summary (extracting exactly as you did in the notebook)
+        summary_el = page_content.select_one('.container--video-page .article-excerpt, .article-excerpt')
+        summary = summary_el.get_text(strip=True) if summary_el else None
+
+        # article content
         page_articles = [article.text for article in page_content.select('.wysiwyg p')[:6]]
 
+        # Add summary to the top of the content list if we found one
+        if summary:
+            page_articles.insert(0, summary)
+
+        # article date
+        article_date_el = page_content.select_one('.date-simple > span')
+        article_date = article_date_el.get_text(strip = True).split(" ")[2] if article_date_el else "No Date"
+
+        # article sources
         article_sources_el = page_content.find('div', class_='article-source')
         if article_sources_el:
             raw_source = article_sources_el.get_text(strip=True)
@@ -189,7 +219,8 @@ def parse_article_page(driver, url: str):
             "Full_Content": page_articles,
             "Publisher": publisher,
             "Topics": page_topics,
-            "Sources": article_sources
+            "Sources": article_sources,
+            "Date": article_date
         }
 
     except TimeoutException:
@@ -213,12 +244,15 @@ def parse_page_articles(driver):
         if not link_tag:
             continue
             
+        # article link
         article_link = link_tag['href']
         full_article_link = f"https://www.ajnet.me{article_link}"
 
+        # article header
         article_header_el = item.find("h2")
         article_header = article_header_el.get_text(strip=True) if article_header_el else "No Headline"
 
+        # article summary
         article_summary_el = item.find("p", class_="article-card__excerpt")
         article_summary = article_summary_el.get_text(strip=True) if article_summary_el else "No Summary"
 
@@ -230,17 +264,16 @@ def parse_page_articles(driver):
             "Link": full_article_link,
             "Headline": article_header,
             "Summary": article_summary,
-            "Date": article_date
         }
 
         print(f"Scraping {idx + 1}/{len(all_article_elements)}: {full_article_link}")
-        detailed_data = parse_article_page(driver, full_article_link)
+        detailed_data = parse_full_article(driver, full_article_link)
         
         if detailed_data:
             article_data.update(detailed_data)
         else:
             article_data.update({
-                "Full_Content": [], "Publisher": "Error", "Topics": [], "Sources": []
+                "Full_Content": [], "Publisher": "Error", "Topics": [], "Sources": [], "Date": "Error"
             })
 
         news.append(article_data)
@@ -263,6 +296,18 @@ def filter_by_date(articles: list, target_date: datetime) -> list:
             filtered.append(article)
             
     return filtered
+
+def sort_articles_desc(articles):
+    """Sort articles by date in descending order (newest first)."""
+    def get_date_key(article):
+        dt_str = article.get("Date", "")
+        try:
+            return datetime.strptime(dt_str, "%d/%m/%Y")
+        except ValueError:
+            # Push invalid/missing dates to the bottom
+            return datetime.min 
+            
+    return sorted(articles, key=get_date_key, reverse=True)
 
 def run_scraper(): 
     """Main scraper entry point."""
@@ -303,6 +348,11 @@ def run_scraper():
         # Ensure everything respects the  default start date (Jan 1, 2026)
         logging.info(f"Filtering {len(all_articles)} total articles...")
         all_articles = filter_by_date(all_articles, DEFAULT_START_DATE)
+
+        # Sort the articles
+        logging.info("Sorting articles by date (descending)...")
+        all_articles = sort_articles_desc(all_articles)
+
         logging.info(f"Done! Returning {len(all_articles)} articles from {DEFAULT_START_DATE.year} onwards.")
         
         save_articles(all_articles)
