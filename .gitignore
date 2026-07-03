@@ -1,0 +1,6 @@
+__pycache__/ 
+.env 
+notebooks/ 
+graphs/
+Aljazeera_topics_model/
+news/
