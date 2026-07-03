@@ -15,12 +15,14 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
 
-# --- Configuration ---
-BASE_URL = "https://www.ajnet.me/politics"
-DATA_DIR = "news/"
-OUTPUT_FILE = os.path.join(DATA_DIR, "aljazeera_articles.json")
+from dotenv import load_dotenv
+load_dotenv()
+
+BASE_URL = os.getenv("BASE_URL", "https://www.ajnet.me/politics")
+OUTPUT_FILE = os.getenv("ARTICLES_PATH", "news/aljazeera_articles.json")
+DATA_DIR = os.path.dirname(OUTPUT_FILE)
 LOG_FILE = os.path.join(DATA_DIR, "scraper_log.txt")
-DEFAULT_START_DATE = datetime(2026, 1, 1) 
+DEFAULT_START_DATE = datetime(2024, 1, 1) 
 
 # --- Setup Logging ---
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -51,8 +53,9 @@ def setup_driver():
     )
 
     # Point to your ChromeDriver (Update path if necessary)
-    service = Service(executable_path=r"F:\Career\Web Scraping\chromedriver.exe")
-    driver = webdriver.Chrome(service=service, options=options) 
+    # service = Service(executable_path=r"F:\Career\Web-Scraping\chromedriver.exe")
+    # driver = webdriver.Chrome(service=service, options=options) 
+    driver = webdriver.Chrome(options=options)
     driver.set_page_load_timeout(30)
     return driver
 
@@ -255,9 +258,6 @@ def parse_page_articles(driver):
         # article summary
         article_summary_el = item.find("p", class_="article-card__excerpt")
         article_summary = article_summary_el.get_text(strip=True) if article_summary_el else "No Summary"
-
-        article_date_el = item.find("span", class_="screen-reader-text")
-        article_date = article_date_el.get_text(strip=True).split(" ")[2] if article_date_el else "No Date"
 
         article_data = {
             "id": generate_article_id(full_article_link),
