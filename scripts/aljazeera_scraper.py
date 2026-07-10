@@ -38,11 +38,12 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 
-def setup_driver(): 
-    # setup driver configurations 
+def setup_driver():
     options = Options()
-    # Point to your Brave installation (Update path if necessary)
-    options.binary_location = r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe"
+
+    browser_path = os.getenv("BROWSER_BINARY_PATH")
+    if browser_path:
+        options.binary_location = browser_path
     
     # runs in the background
     options.add_argument("--headless")
