@@ -1,29 +1,42 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 
+from api.core.config import settings
+from api.db.session import engine
 from api.routers.v1.api import api_router
 
 app = FastAPI(
-    title="Chronos Intelligence API",
+    title=settings.PROJECT_NAME,
     description="Backend API for Al Jazeera Dashboard",
-    version="1.0.0"
+    version=settings.VERSION,
 )
 
-# CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.cors_origin_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Include the main API router
 app.include_router(api_router, prefix="/api/v1")
+
 
 @app.get("/")
 def root():
     return {"message": "Welcome to the Chronos Intelligence API. Go to /docs for the API documentation."}
+
+
+@app.get("/health")
+def health():
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        return {"status": "healthy", "database": "connected"}
+    except Exception:
+        return {"status": "unhealthy", "database": "disconnected"}
+
 
 if __name__ == "__main__":
     import uvicorn
