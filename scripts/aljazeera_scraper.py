@@ -1,4 +1,5 @@
-import json  
+import argparse
+import json
 import os
 import sys
 import hashlib
@@ -7,7 +8,7 @@ import time
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT_DIR))  
+sys.path.insert(0, str(ROOT_DIR))
 from datetime import datetime, timedelta
 from tqdm import tqdm
 from bs4 import BeautifulSoup
@@ -22,6 +23,9 @@ from selenium.common.exceptions import NoSuchElementException, TimeoutException
 
 from dotenv import load_dotenv
 load_dotenv()
+
+MAX_RETRIES = 3
+BACKOFF_BASE = 2
 
 BASE_URL = os.getenv("BASE_URL", "https://www.ajnet.me/politics")
 OUTPUT_FILE = os.getenv("ARTICLES_PATH", str(ROOT_DIR / "news" / "aljazeera_articles.json"))
@@ -170,77 +174,88 @@ def scroll_and_load_more(driver, target_date, max_scrolls=500):
 
     logging.info("Finished scrolling.")
 
-def parse_full_article(driver, url: str): 
+def _fetch_article_page(driver, url: str):
+    """Load an article page with retry + exponential backoff.
+
+    Returns the BeautifulSoup object for the page, or None after exhausting retries.
+    """
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            driver.get(url)
+            time.sleep(2)
+            soup = BeautifulSoup(driver.page_source, "html.parser")
+
+            if not soup.select('.wysiwyg p'):
+                try:
+                    article_link = driver.find_element(By.CSS_SELECTOR, ".article-card a")
+                    driver.execute_script("arguments[0].click();", article_link)
+                    time.sleep(2)
+                    soup = BeautifulSoup(driver.page_source, "html.parser")
+                except NoSuchElementException:
+                    pass
+
+            return soup
+
+        except TimeoutException:
+            wait = BACKOFF_BASE ** attempt
+            logging.warning(f"  Timeout loading {url} (attempt {attempt}/{MAX_RETRIES}). Retrying in {wait}s...")
+            time.sleep(wait)
+        except Exception as e:
+            wait = BACKOFF_BASE ** attempt
+            logging.warning(f"  Error loading {url} (attempt {attempt}/{MAX_RETRIES}): {e}. Retrying in {wait}s...")
+            time.sleep(wait)
+
+    logging.error(f"  Failed to load {url} after {MAX_RETRIES} attempts.")
+    return None
+
+
+def parse_full_article(driver, url: str):
     """Visit an individual article page and extract full content."""
-    try: 
-        driver.get(url)
-        time.sleep(2) 
-
-        soup = BeautifulSoup(driver.page_source, "html.parser")
-        # If the page lacks standard article text, check if it's a menu/gateway page
-        if not soup.select('.wysiwyg p'):
-            try: 
-                # Find the link
-                article_link = driver.find_element(By.CSS_SELECTOR, ".article-card a")
-                # Click the link
-                driver.execute_script("arguments[0].click();", article_link)
-                time.sleep(2)
-                # Update soup and page_content for the new page
-                soup = BeautifulSoup(driver.page_source, "html.parser")
-            except NoSuchElementException:
-                pass
-
-        page_content = soup.find('main')
-        if not page_content:
-            return None
-        
-        # article topics
-        page_topics = [topic.text for topic in page_content.select('.breadcrumbs a')]
-
-        # article publisher
-        publisher_el = page_content.select_one('.contributors-list--byline a')
-        publisher = publisher_el.get_text(strip=True) if publisher_el else "Al Jazeera Staff"
-
-        # article summary (extracting exactly as you did in the notebook)
-        summary_el = page_content.select_one('.container--video-page .article-excerpt, .article-excerpt')
-        summary = summary_el.get_text(strip=True) if summary_el else None
-
-        # article content
-        page_articles = [article.text for article in page_content.select('.wysiwyg p')[:6]]
-
-        # Add summary to the top of the content list if we found one
-        if summary:
-            page_articles.insert(0, summary)
-
-        # article date
-        article_date_el = page_content.select_one('.date-simple > span')
-        article_date = article_date_el.get_text(strip = True).split(" ")[2] if article_date_el else "No Date"
-
-        # article sources
-        article_sources_el = page_content.find('div', class_='article-source')
-        if article_sources_el:
-            raw_source = article_sources_el.get_text(strip=True)
-            article_sources = raw_source.replace('المصدر:', '').split('+')
-        else:
-            article_sources = []
-
-        return {
-            "Full_Content": page_articles,
-            "Publisher": publisher,
-            "Topics": page_topics,
-            "Sources": article_sources,
-            "Date": article_date
-        }
-
-    except TimeoutException:
-        logging.warning(f"  Timeout: The page {url} took too long to load.")
-        return None
-    except Exception as e:
-        logging.error(f"  Error parsing {url}: {e}")
+    soup = _fetch_article_page(driver, url)
+    if not soup:
         return None
 
-def parse_page_articles(driver): 
-    """Extract basic info from the section page, then visit each article link."""
+    page_content = soup.find('main')
+    if not page_content:
+        return None
+
+    page_topics = [topic.text for topic in page_content.select('.breadcrumbs a')]
+
+    publisher_el = page_content.select_one('.contributors-list--byline a')
+    publisher = publisher_el.get_text(strip=True) if publisher_el else "Al Jazeera Staff"
+
+    summary_el = page_content.select_one('.container--video-page .article-excerpt, .article-excerpt')
+    summary = summary_el.get_text(strip=True) if summary_el else None
+
+    page_articles = [article.text for article in page_content.select('.wysiwyg p')[:6]]
+
+    if summary:
+        page_articles.insert(0, summary)
+
+    article_date_el = page_content.select_one('.date-simple > span')
+    article_date = article_date_el.get_text(strip=True).split(" ")[2] if article_date_el else "No Date"
+
+    article_sources_el = page_content.find('div', class_='article-source')
+    if article_sources_el:
+        raw_source = article_sources_el.get_text(strip=True)
+        article_sources = raw_source.replace('المصدر:', '').split('+')
+    else:
+        article_sources = []
+
+    return {
+        "Full_Content": page_articles,
+        "Publisher": publisher,
+        "Topics": page_topics,
+        "Sources": article_sources,
+        "Date": article_date
+    }
+
+def parse_page_articles(driver, dry_run=False):
+    """Extract basic info from the section page, then visit each article link.
+
+    In dry-run mode, only the feed-level metadata is collected (no individual
+    article pages are visited).
+    """
     news = []
     soup = BeautifulSoup(driver.page_source, "html.parser")
 
@@ -248,20 +263,17 @@ def parse_page_articles(driver):
     articles_section = soup.find_all("article", class_="gc--list")
     all_article_elements = thumbnail_articles + articles_section
 
-    for idx, item in enumerate(all_article_elements): 
+    for idx, item in enumerate(all_article_elements):
         link_tag = item.find("a", href=True)
         if not link_tag:
             continue
-            
-        # article link
+
         article_link = link_tag['href']
         full_article_link = f"https://www.ajnet.me{article_link}"
 
-        # article header
         article_header_el = item.find("h2")
         article_header = article_header_el.get_text(strip=True) if article_header_el else "No Headline"
 
-        # article summary
         article_summary_el = item.find("p", class_="article-card__excerpt")
         article_summary = article_summary_el.get_text(strip=True) if article_summary_el else "No Summary"
 
@@ -272,9 +284,14 @@ def parse_page_articles(driver):
             "Summary": article_summary,
         }
 
+        if dry_run:
+            print(f"[dry-run] {idx + 1}/{len(all_article_elements)}: {article_header}")
+            news.append(article_data)
+            continue
+
         print(f"Scraping {idx + 1}/{len(all_article_elements)}: {full_article_link}")
         detailed_data = parse_full_article(driver, full_article_link)
-        
+
         if detailed_data:
             article_data.update(detailed_data)
         else:
@@ -283,7 +300,7 @@ def parse_page_articles(driver):
             })
 
         news.append(article_data)
-    
+
     return news
 
 def filter_by_date(articles: list, target_date: datetime) -> list:
@@ -315,17 +332,19 @@ def sort_articles_desc(articles):
             
     return sorted(articles, key=get_date_key, reverse=True)
 
-def run_scraper(): 
+def run_scraper(dry_run=False):
     """Main scraper entry point."""
     logging.info("=" * 60)
     logging.info("--- Aljazeera Scraper Started ---")
+    if dry_run:
+        logging.info("DRY-RUN mode — no data will be saved.")
+        print("=== DRY-RUN MODE ===")
+
     driver = None
-    try: 
-        # Load existing articles
+    try:
         existing = load_existing_articles()
         logging.info(f"Found {len(existing)} existing articles.")
 
-        # Calculate the dynamic target date based on existing data
         target_date = get_latest_scraped_date(existing, DEFAULT_START_DATE)
         logging.info(f"Target date for scraping set to: {target_date.date()}")
 
@@ -336,31 +355,35 @@ def run_scraper():
 
         accept_cookies(driver)
 
-        # Scroll to load articles up to the dynamically calculated target_date
-        scroll_and_load_more(driver, target_date)  
-        new_articles = parse_page_articles(driver)
+        scroll_and_load_more(driver, target_date)
+        new_articles = parse_page_articles(driver, dry_run=dry_run)
 
-        # Deduplicate: Only keep new articles if their link isn't in existing_urls 
         existing_urls = {article["Link"] for article in existing}
         unique_new_articles = [
-            article for article in new_articles 
+            article for article in new_articles
             if article["Link"] not in existing_urls
         ]
         logging.info(f"Found {len(unique_new_articles)} strictly new articles out of {len(new_articles)} scraped on the feed.")
 
-        # Combine existing with the new unique articles
+        if dry_run:
+            print(f"\n--- Dry-run summary ---")
+            print(f"  Existing articles: {len(existing)}")
+            print(f"  Articles on feed:  {len(new_articles)}")
+            print(f"  New (unique):      {len(unique_new_articles)}")
+            print(f"  Target date:       {target_date.date()}")
+            print(f"  Nothing was saved.")
+            return
+
         all_articles = existing + unique_new_articles
 
-        # Ensure everything respects the  default start date (Jan 1, 2026)
         logging.info(f"Filtering {len(all_articles)} total articles...")
         all_articles = filter_by_date(all_articles, DEFAULT_START_DATE)
 
-        # Sort the articles
         logging.info("Sorting articles by date (descending)...")
         all_articles = sort_articles_desc(all_articles)
 
         logging.info(f"Done! Returning {len(all_articles)} articles from {DEFAULT_START_DATE.year} onwards.")
-        
+
         save_articles(all_articles)
         logging.info(f"Scraping complete. Total articles saved: {len(all_articles)}")
 
@@ -374,5 +397,17 @@ def run_scraper():
         logging.info("--- Scraper Stopped ---\n")
         logging.info("=" * 60)
 
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Scrape Al Jazeera politics articles.")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show what would be scraped without saving any data or visiting article pages.",
+    )
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
-    run_scraper()
+    args = parse_args()
+    run_scraper(dry_run=args.dry_run)
