@@ -327,7 +327,6 @@ def sort_articles_desc(articles):
         try:
             return datetime.strptime(dt_str, "%d/%m/%Y")
         except ValueError:
-            # Push invalid/missing dates to the bottom
             return datetime.min 
             
     return sorted(articles, key=get_date_key, reverse=True)
