@@ -50,9 +50,10 @@ The database starts empty. To populate it, run the pipeline scripts below in ord
 ```sh
 python scripts/aljazeera_scraper.py          # scrape articles into news/aljazeera_articles.json
 python scripts/topic_modeling.py             # train BERTopic and save it to Aljazeera_topics_model/
-python scripts/process_dashboard_data.py     # label new articles + upsert topic keywords into Postgres
-python -m api.utils.db_loader                # load processed_articles.json into the articles table
+python scripts/process_dashboard_data.py     # label new articles + upsert directly into Postgres
 ```
+
+The scraper supports `--dry-run` to preview what would be scraped without saving anything.
 
 ### Local Development (without Docker)
 
