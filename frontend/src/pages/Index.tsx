@@ -14,7 +14,7 @@ const Index = () => {
       <header className="border-b border-border">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-6">
           <h1 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-foreground tracking-tight">
-            Chronos <span className="text-primary">Intelligence</span>
+            Eyes on the <span className="text-primary">Middle East</span>
           </h1>
           <p className="text-sm sm:text-base text-muted-foreground font-body mt-1">
             Al Jazeera political article trends & topic modeling — powered by BERTopic
