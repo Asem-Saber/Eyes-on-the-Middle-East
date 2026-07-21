@@ -5,6 +5,7 @@ from sqlalchemy import func, desc
 from api.models.article import Article
 from api.models.topic_meta import TopicMeta
 from api.utils.topic_labels import parse_topic_label
+from api.utils.serializers import article_to_dict
 
 
 def get_topic_distribution(db: Session):
@@ -36,13 +37,17 @@ def get_topics_list(db: Session):
         .all()
     )
 
+    topic_ids = [r[0] for r in results]
+    meta_rows = db.query(TopicMeta).filter(TopicMeta.topic_id.in_(topic_ids)).all()
+    meta_map = {m.topic_id: m for m in meta_rows}
+
     topics = []
     for r in results:
         topic_id = r[0]
         raw_label = r[1] or ""
         count = r[2]
 
-        meta = db.query(TopicMeta).filter(TopicMeta.topic_id == topic_id).first()
+        meta = meta_map.get(topic_id)
         if meta:
             name = meta.name
             keywords = meta.keywords or []
@@ -62,7 +67,6 @@ def get_topics_list(db: Session):
 
 
 def get_topic_detail(db: Session, topic_id: int):
-    from api.services.article_service import _article_to_dict
 
     topic_meta = db.query(TopicMeta).filter(TopicMeta.topic_id == topic_id).first()
     has_articles = (
@@ -176,7 +180,7 @@ def get_topic_detail(db: Session, topic_id: int):
         "contributors": [{"author": c[0], "count": c[1]} for c in contributors],
         "trend": [{"week": t[0], "count": t[1]} for t in trend_results],
         "monthly_volume": [{"month": m[0], "count": m[1]} for m in monthly_results],
-        "articles": [_article_to_dict(article) for article in topic_articles],
+        "articles": [article_to_dict(article) for article in topic_articles],
     }
 
 

@@ -4,6 +4,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc, or_
 from api.models.article import Article
+from api.utils.serializers import article_to_dict
 
 
 def get_recent_articles(db: Session, limit: int = 10):
@@ -14,7 +15,7 @@ def get_recent_articles(db: Session, limit: int = 10):
         .limit(limit)
         .all()
     )
-    return [_article_to_dict(r) for r in results]
+    return [article_to_dict(r) for r in results]
 
 
 def get_articles_paginated(
@@ -34,7 +35,8 @@ def get_articles_paginated(
         query = query.filter(Article.topic_id == topic_id)
 
     if search:
-        pattern = f"%{search}%"
+        escaped = search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        pattern = f"%{escaped}%"
         query = query.filter(
             or_(
                 Article.headline.ilike(pattern),
@@ -64,7 +66,7 @@ def get_articles_paginated(
     results = query.order_by(desc(Article.date)).offset(offset).limit(limit).all()
 
     return {
-        "articles": [_article_to_dict(r) for r in results],
+        "articles": [article_to_dict(r) for r in results],
         "total": total,
         "page": page,
         "pages": pages,
@@ -76,7 +78,7 @@ def get_article_by_id(db: Session, article_id: str):
     if not article:
         return None
 
-    d = _article_to_dict(article)
+    d = article_to_dict(article)
     d["full_content"] = article.full_content or []
     d["topics"] = article.topics or []
     d["sources"] = article.sources or []
@@ -95,16 +97,3 @@ def get_monthly_volume(db: Session):
         .all()
     )
     return [{"month": r[0], "count": r[1]} for r in results]
-
-
-def _article_to_dict(r: Article) -> dict:
-    return {
-        "id": r.id,
-        "headline": r.headline,
-        "summary": r.summary or "",
-        "topic_label": r.topic_label or "Uncategorized",
-        "topic_id": r.topic_id,
-        "author": r.publisher or "Unknown",
-        "date": r.date.strftime("%Y-%m-%d") if r.date else "No Date",
-        "link": r.link or "#",
-    }
