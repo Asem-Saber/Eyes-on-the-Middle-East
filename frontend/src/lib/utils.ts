@@ -29,3 +29,14 @@ export function formatNumber(n: number): string {
 export function stripByPrefix(name: string): string {
   return name.replace(/^By\s+/i, "");
 }
+
+export const CHART_TOOLTIP_STYLE = {
+  contentStyle: {
+    background: "hsl(240,8%,8%)",
+    border: "1px solid hsl(240,10%,16%)",
+    borderRadius: "8px",
+    fontSize: "13px",
+    fontFamily: "var(--font-body)",
+  },
+  labelStyle: { color: "hsl(40,20%,92%)" },
+} as const;
