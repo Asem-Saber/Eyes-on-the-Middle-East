@@ -48,7 +48,7 @@ docker compose up --build
 The database starts empty. To populate it, run the pipeline scripts below in order:
 
 ```sh
-python scripts/aljazeera_scraper.py          # scrape articles into news/aljazeera_articles.json
+python scripts/scraper.py                    # scrape articles into news/aljazeera_articles.json
 python scripts/topic_modeling.py             # train BERTopic and save it to Aljazeera_topics_model/
 python scripts/process_dashboard_data.py     # label new articles + upsert directly into Postgres
 ```
