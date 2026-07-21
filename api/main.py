@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from api.core.config import settings
@@ -35,7 +36,10 @@ def health():
             conn.execute(text("SELECT 1"))
         return {"status": "healthy", "database": "connected"}
     except Exception:
-        return {"status": "unhealthy", "database": "disconnected"}
+        return JSONResponse(
+            status_code=503,
+            content={"status": "unhealthy", "database": "disconnected"},
+        )
 
 
 if __name__ == "__main__":
