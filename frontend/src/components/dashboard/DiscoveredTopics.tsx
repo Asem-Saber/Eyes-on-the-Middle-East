@@ -3,13 +3,34 @@ import { useNavigate } from "react-router-dom";
 import { BarChart3, ChevronRight } from "lucide-react";
 import { useTopics } from "@/lib/queries";
 import { getTopicColor, formatNumber } from "@/lib/utils";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const DiscoveredTopics = () => {
   const navigate = useNavigate();
   const [hoveredId, setHoveredId] = useState<number | null>(null);
-  const { data: topics } = useTopics();
+  const { data: topics, isLoading, isError } = useTopics();
 
-  if (!topics) return null;
+  if (isLoading) {
+    return (
+      <div className="bg-card border border-border rounded-lg p-6 h-full">
+        <Skeleton className="h-6 w-48 mb-2" />
+        <Skeleton className="h-4 w-64 mb-4" />
+        <div className="space-y-2">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <Skeleton key={i} className="h-10 w-full rounded-lg" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (isError || !topics) {
+    return (
+      <div className="bg-card border border-destructive/50 rounded-lg p-6 h-full text-center">
+        <p className="text-sm text-destructive font-body">Failed to load topics.</p>
+      </div>
+    );
+  }
 
   const topicData = topics.slice(0, 15);
 

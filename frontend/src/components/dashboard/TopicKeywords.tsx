@@ -2,12 +2,33 @@ import { useNavigate } from "react-router-dom";
 import { Hash } from "lucide-react";
 import { useTopics } from "@/lib/queries";
 import { getTopicColor } from "@/lib/utils";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const TopicKeywords = () => {
   const navigate = useNavigate();
-  const { data: topics } = useTopics();
+  const { data: topics, isLoading, isError } = useTopics();
 
-  if (!topics) return null;
+  if (isLoading) {
+    return (
+      <div className="bg-card border border-border rounded-lg p-6 h-full">
+        <Skeleton className="h-6 w-36 mb-2" />
+        <Skeleton className="h-4 w-56 mb-5" />
+        <div className="flex flex-wrap gap-3 justify-center mt-6">
+          {Array.from({ length: 15 }).map((_, i) => (
+            <Skeleton key={i} className="h-8 rounded" style={{ width: `${60 + Math.random() * 80}px` }} />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (isError || !topics) {
+    return (
+      <div className="bg-card border border-destructive/50 rounded-lg p-6 h-full text-center">
+        <p className="text-sm text-destructive font-body">Failed to load keywords.</p>
+      </div>
+    );
+  }
 
   const allKeywords = topics.flatMap((t, tIdx) =>
     t.keywords.map((kw, i) => ({

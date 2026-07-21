@@ -1,9 +1,30 @@
 import { useAuthors } from "@/lib/queries";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const TopAuthors = () => {
-  const { data: authors } = useAuthors(8);
+  const { data: authors, isLoading, isError } = useAuthors(8);
 
-  if (!authors || authors.length === 0) return null;
+  if (isLoading) {
+    return (
+      <div className="bg-card border border-border rounded-lg p-6">
+        <Skeleton className="h-6 w-32 mb-2" />
+        <Skeleton className="h-4 w-44 mb-6" />
+        <div className="space-y-3">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i}>
+              <div className="flex justify-between mb-1">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-4 w-16" />
+              </div>
+              <Skeleton className="h-2 w-full rounded-full" />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (isError || !authors || authors.length === 0) return null;
 
   const max = authors[0]?.count || 1;
 

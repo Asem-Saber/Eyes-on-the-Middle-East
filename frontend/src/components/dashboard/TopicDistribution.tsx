@@ -1,14 +1,33 @@
 import { useNavigate } from "react-router-dom";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { useTopicDistribution, useTopics } from "@/lib/queries";
-import { getTopicColor } from "@/lib/utils";
+import { getTopicColor, CHART_TOOLTIP_STYLE } from "@/lib/utils";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const TopicDistribution = () => {
   const navigate = useNavigate();
-  const { data: distData } = useTopicDistribution();
-  const { data: topics } = useTopics();
+  const { data: distData, isLoading: distLoading, isError: distError } = useTopicDistribution();
+  const { data: topics, isLoading: topicsLoading, isError: topicsError } = useTopics();
 
-  if (!distData || !topics) return null;
+  if (distLoading || topicsLoading) {
+    return (
+      <div className="bg-card border border-border rounded-lg p-6 h-full flex flex-col">
+        <Skeleton className="h-6 w-44 mb-2" />
+        <Skeleton className="h-4 w-56 mb-4" />
+        <div className="flex-1 flex items-center justify-center">
+          <Skeleton className="h-[220px] w-[220px] rounded-full" />
+        </div>
+      </div>
+    );
+  }
+
+  if (distError || topicsError || !distData || !topics) {
+    return (
+      <div className="bg-card border border-destructive/50 rounded-lg p-6 h-full text-center">
+        <p className="text-sm text-destructive font-body">Failed to load topic distribution.</p>
+      </div>
+    );
+  }
 
   const data = distData.slice(0, 10).map((d, index) => {
     const topicIdx = topics.findIndex((t) => t.name === d.topic);
@@ -53,14 +72,7 @@ const TopicDistribution = () => {
                 ))}
               </Pie>
               <Tooltip
-                contentStyle={{
-                  background: "hsl(240,8%,8%)",
-                  border: "1px solid hsl(240,10%,16%)",
-                  borderRadius: "8px",
-                  fontSize: "13px",
-                  fontFamily: "var(--font-body)",
-                }}
-                labelStyle={{ color: "hsl(40,20%,92%)" }}
+                {...CHART_TOOLTIP_STYLE}
                 formatter={(value: number, name: string) => [`${value} articles`, name]}
               />
             </PieChart>

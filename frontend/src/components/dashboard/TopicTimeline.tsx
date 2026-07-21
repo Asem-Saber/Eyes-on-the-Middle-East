@@ -1,12 +1,29 @@
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { useTopicTrends, useTopics } from "@/lib/queries";
-import { getTopicColor } from "@/lib/utils";
+import { getTopicColor, CHART_TOOLTIP_STYLE } from "@/lib/utils";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const TopicTimeline = () => {
-  const { data: topicTrends } = useTopicTrends();
-  const { data: topics } = useTopics();
+  const { data: topicTrends, isLoading: trendsLoading, isError: trendsError } = useTopicTrends();
+  const { data: topics, isLoading: topicsLoading, isError: topicsError } = useTopics();
 
-  if (!topicTrends || !topics) return null;
+  if (trendsLoading || topicsLoading) {
+    return (
+      <div className="bg-card border border-border rounded-lg p-6">
+        <Skeleton className="h-6 w-40 mb-2" />
+        <Skeleton className="h-4 w-64 mb-6" />
+        <Skeleton className="h-[340px] w-full rounded" />
+      </div>
+    );
+  }
+
+  if (trendsError || topicsError || !topicTrends || !topics) {
+    return (
+      <div className="bg-card border border-destructive/50 rounded-lg p-6 text-center">
+        <p className="text-sm text-destructive font-body">Failed to load topic trends.</p>
+      </div>
+    );
+  }
 
   const topicKeys = Object.keys(topicTrends[0] || {}).filter((k) => k !== "week").slice(0, 5);
 
@@ -33,16 +50,7 @@ const TopicTimeline = () => {
           <LineChart data={topicTrends} margin={{ left: 0, right: 16, top: 8, bottom: 0 }}>
             <XAxis dataKey="week" stroke="hsl(240,5%,55%)" fontSize={12} tickLine={false} axisLine={false} />
             <YAxis stroke="hsl(240,5%,55%)" fontSize={12} tickLine={false} axisLine={false} />
-            <Tooltip
-              contentStyle={{
-                background: "hsl(240,8%,8%)",
-                border: "1px solid hsl(240,10%,16%)",
-                borderRadius: "8px",
-                fontSize: "13px",
-                fontFamily: "var(--font-body)",
-              }}
-              labelStyle={{ color: "hsl(40,20%,92%)" }}
-            />
+            <Tooltip {...CHART_TOOLTIP_STYLE} />
             <Legend wrapperStyle={{ fontSize: "12px", fontFamily: "var(--font-body)" }} />
             {topicKeys.map((key, i) => (
               <Line

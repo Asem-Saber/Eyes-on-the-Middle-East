@@ -1,12 +1,12 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { ArrowLeft, ExternalLink, TrendingUp, Users, Calendar as CalendarIcon, ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowLeft, ExternalLink, TrendingUp, Users, Calendar as CalendarIcon } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar } from "recharts";
 import { useTopicDetail, useArticles } from "@/lib/queries";
 import { Article } from "@/lib/api";
-import { getTopicColor, formatNumber } from "@/lib/utils";
+import { getTopicColor, formatNumber, CHART_TOOLTIP_STYLE } from "@/lib/utils";
 import ArticleDrawer from "@/components/dashboard/ArticleDrawer";
-import { Button } from "@/components/ui/button";
+import PaginationBar from "@/components/shared/PaginationBar";
 
 const TopicDetail = () => {
   const { id } = useParams();
@@ -84,10 +84,7 @@ const TopicDetail = () => {
                 <LineChart data={topic.trend} margin={{ left: 0, right: 8, top: 8, bottom: 0 }}>
                   <XAxis dataKey="week" stroke="hsl(240,5%,55%)" fontSize={11} tickLine={false} axisLine={false} />
                   <YAxis stroke="hsl(240,5%,55%)" fontSize={11} tickLine={false} axisLine={false} />
-                  <Tooltip
-                    contentStyle={{ background: "hsl(240,8%,8%)", border: "1px solid hsl(240,10%,16%)", borderRadius: "8px", fontSize: "13px", fontFamily: "var(--font-body)" }}
-                    labelStyle={{ color: "hsl(40,20%,92%)" }}
-                  />
+                  <Tooltip {...CHART_TOOLTIP_STYLE} />
                   <Line type="monotone" dataKey="count" stroke={color} strokeWidth={2.5} dot={{ r: 3, fill: color }} activeDot={{ r: 5 }} />
                 </LineChart>
               </ResponsiveContainer>
@@ -104,8 +101,7 @@ const TopicDetail = () => {
                   <XAxis type="number" stroke="hsl(240,5%,55%)" fontSize={11} tickLine={false} axisLine={false} />
                   <YAxis type="category" dataKey="author" width={80} stroke="hsl(240,5%,55%)" fontSize={11} tickLine={false} axisLine={false} />
                   <Tooltip
-                    contentStyle={{ background: "hsl(240,8%,8%)", border: "1px solid hsl(240,10%,16%)", borderRadius: "8px", fontSize: "13px", fontFamily: "var(--font-body)" }}
-                    labelStyle={{ color: "hsl(40,20%,92%)" }}
+                    {...CHART_TOOLTIP_STYLE}
                     formatter={(value: number, _: string, props: any) => [`${value} articles`, props.payload.author]}
                   />
                   <Bar dataKey="count" fill={color} radius={[0, 4, 4, 0]} barSize={20} />
@@ -125,10 +121,7 @@ const TopicDetail = () => {
                 <BarChart data={topic.monthly_volume} margin={{ left: 0, right: 8, top: 8, bottom: 0 }}>
                   <XAxis dataKey="month" stroke="hsl(240,5%,55%)" fontSize={11} tickLine={false} axisLine={false} />
                   <YAxis stroke="hsl(240,5%,55%)" fontSize={11} tickLine={false} axisLine={false} />
-                  <Tooltip
-                    contentStyle={{ background: "hsl(240,8%,8%)", border: "1px solid hsl(240,10%,16%)", borderRadius: "8px", fontSize: "13px", fontFamily: "var(--font-body)" }}
-                    labelStyle={{ color: "hsl(40,20%,92%)" }}
-                  />
+                  <Tooltip {...CHART_TOOLTIP_STYLE} />
                   <Bar dataKey="count" fill={color} radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
@@ -190,27 +183,7 @@ const TopicDetail = () => {
               ))}
             </div>
           )}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between mt-5 pt-4 border-t border-border">
-              <p className="text-xs text-muted-foreground font-body">
-                {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, totalCount)} of {totalCount}
-              </p>
-              <div className="flex items-center gap-1">
-                <Button variant="ghost" size="sm" className="h-8 w-8 p-0" disabled={page === 1} onClick={() => setPage((p) => p - 1)}>
-                  <ChevronLeft className="w-4 h-4" />
-                </Button>
-                {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => i + 1).map((p) => (
-                  <Button key={p} variant={p === page ? "default" : "ghost"} size="sm" className="h-8 w-8 p-0 text-xs" onClick={() => setPage(p)}>
-                    {p}
-                  </Button>
-                ))}
-                {totalPages > 7 && <span className="text-xs text-muted-foreground px-1">…</span>}
-                <Button variant="ghost" size="sm" className="h-8 w-8 p-0" disabled={page === totalPages} onClick={() => setPage((p) => p + 1)}>
-                  <ChevronRight className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-          )}
+          <PaginationBar page={page} totalPages={totalPages} pageSize={PAGE_SIZE} totalCount={totalCount} onPageChange={setPage} />
         </div>
       </main>
 
