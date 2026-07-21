@@ -116,10 +116,7 @@ def save_topic_metadata(db, topic_model):
 
 
 def main():
-    from api.db.session import SessionLocal, engine
-    from api.db.base import Base
-
-    Base.metadata.create_all(bind=engine)
+    from api.db.session import SessionLocal
 
     articles = load_raw_articles()
     if not articles:
