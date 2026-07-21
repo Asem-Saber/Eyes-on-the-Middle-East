@@ -92,22 +92,17 @@ def upsert_articles(db, articles_with_topics):
 
 def save_topic_metadata(db, topic_model):
     from api.models.topic_meta import TopicMeta
+    from api.utils.topic_labels import parse_topic_label
 
     topic_info = topic_model.get_topic_info()
     for _, row in topic_info.iterrows():
         tid = int(row["Topic"])
         if tid == -1:
             continue
-        raw_name = row["Name"]
-        parts = raw_name.split("_")
-        if parts and parts[0].lstrip("-").isdigit():
-            parts = parts[1:]
-        display_name = " ".join(w.capitalize() for w in parts)
+
+        display_name, fallback_keywords = parse_topic_label(row["Name"])
         topic_words = topic_model.get_topic(tid)
-        if topic_words:
-            keywords = [word for word, _score in topic_words[:10]]
-        else:
-            keywords = parts[:10]
+        keywords = [word for word, _score in topic_words[:10]] if topic_words else fallback_keywords
 
         existing = db.query(TopicMeta).filter(TopicMeta.topic_id == tid).first()
         if existing:
