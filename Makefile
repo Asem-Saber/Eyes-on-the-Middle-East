@@ -1,10 +1,10 @@
-.PHONY: scrape model process pipeline pipeline-full migrate dev-api dev-frontend
+.PHONY: scrape model process pipeline pipeline-full migrate dev-api dev-frontend test test-api test-frontend
 
 scrape:
-	python scripts/aljazeera_scraper.py
+	python scripts/scraper.py
 
 scrape-dry:
-	python scripts/aljazeera_scraper.py --dry-run
+	python scripts/scraper.py --dry-run
 
 model:
 	python scripts/topic_modeling.py
@@ -24,3 +24,11 @@ dev-api:
 
 dev-frontend:
 	cd frontend && npm run dev
+
+test: test-api test-frontend
+
+test-api:
+	python -m pytest tests/ -v
+
+test-frontend:
+	cd frontend && npx vitest run
