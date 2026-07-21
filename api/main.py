@@ -26,7 +26,7 @@ app.include_router(api_router, prefix="/api/v1")
 
 @app.get("/")
 def root():
-    return {"message": "Welcome to the Chronos Intelligence API. Go to /docs for the API documentation."}
+    return {"message": "Welcome to the Eyes on the Middle East API. Go to /docs for the API documentation."}
 
 
 @app.get("/health")
