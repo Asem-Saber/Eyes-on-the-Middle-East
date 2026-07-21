@@ -7,7 +7,7 @@ from api.schemas.articles import (
     PaginatedArticleResponse,
     MonthlyVolumeResponse,
 )
-from api.services.analytics import (
+from api.services.article_service import (
     get_recent_articles,
     get_articles_paginated,
     get_article_by_id,

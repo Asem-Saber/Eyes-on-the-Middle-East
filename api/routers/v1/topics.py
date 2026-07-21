@@ -7,7 +7,7 @@ from api.schemas.topics import (
     TopicResponse,
     TopicDetailResponse,
 )
-from api.services.analytics import (
+from api.services.topic_service import (
     get_topic_distribution,
     get_topic_trends,
     get_topics_list,

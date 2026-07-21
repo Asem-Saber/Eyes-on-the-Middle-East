@@ -2,7 +2,7 @@ from fastapi import APIRouter, Query, Depends
 from typing import List
 from sqlalchemy.orm import Session
 from api.schemas.authors import AuthorResponse
-from api.services.analytics import get_top_authors
+from api.services.author_service import get_top_authors
 from api.db.session import get_db
 
 router = APIRouter()

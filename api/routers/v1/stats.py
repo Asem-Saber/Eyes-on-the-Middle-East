@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from api.schemas.stats import StatsResponse
-from api.services.analytics import get_dashboard_stats
+from api.services.stats_service import get_dashboard_stats
 from api.db.session import get_db
 
 router = APIRouter()
