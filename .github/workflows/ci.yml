@@ -1,0 +1,52 @@
+name: CI
+
+on:
+    push:
+        branches:
+            - main
+            - v2-production
+            - feat/v2-scraper-ingestion
+        paths-ignore:
+            - "**.md"
+    pull_request:
+        branches:
+            - main
+            - v2-production
+        paths-ignore:
+            - "**.md"
+
+permissions:
+    contents: read
+
+concurrency:
+    group: ${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    test:
+        name: ${{ matrix.os }} / Python ${{ matrix.python-version }}
+        runs-on: ${{ matrix.os }}
+        strategy:
+            fail-fast: false
+            matrix:
+                os: ["ubuntu-latest", "windows-latest"]
+                python-version:
+                    - "3.11"
+                    - "3.12"
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v7
+
+            - name: Set up uv
+              uses: astral-sh/setup-uv@v10.0.0
+              with:
+                  enable-cache: true
+                  cache-dependency-glob: "uv.lock"
+                  python-version: ${{ matrix.python-version }}
+
+            - name: Install dependencies
+              run: uv sync --locked --group dev
+
+            - name: Run tests
+              run: uv run pytest -q
