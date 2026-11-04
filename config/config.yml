@@ -1,0 +1,20 @@
+paths:
+  articles_file: data/articles.json
+  scraper_log: logs/scraper_log.txt
+
+scraper:
+  base_url: https://www.ajnet.me/politics
+  base_domain: https://www.ajnet.me
+  default_start_date: "2026-11-01"
+  rescan_buffer_hours: 3
+  max_retries: 3
+  backoff_base: 2
+  max_scrolls: 500
+  headless: true
+  page_load_timeout: 30
+  article_delay: 1.0
+  feed_load_timeout: 10
+  max_paragraphs: 6
+  user_agent: >-
+    Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+    (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36
