@@ -1,0 +1,16 @@
+[project]
+name = "eyes-on-the-middleeast-v2"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "beautifulsoup4>=4.15.0",
+    "pyyaml>=6.0.3",
+    "selenium>=4.52.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+]
