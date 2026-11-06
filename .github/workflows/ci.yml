@@ -6,6 +6,7 @@ on:
             - main
             - v2-production
             - feat/v2-scraper-ingestion
+            - feat/v2-data-pipline
         paths-ignore:
             - "**.md"
     pull_request:
