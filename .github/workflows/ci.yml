@@ -5,7 +5,8 @@ on:
         branches:
             - main
             - v2-production
-            - feat/v2-scraper-ingestion
+            - feat/v2-scraper-ingestion 
+            - feat/topic-modeling
         paths-ignore:
             - "**.md"
     pull_request:
