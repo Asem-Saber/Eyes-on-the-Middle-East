@@ -18,3 +18,39 @@ scraper:
   user_agent: >-
     Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
     (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36
+
+ml_service:
+  model_name: news_topics_model
+  model_dir: models/news_topics_model
+  embedding_model: sentence-transformers/paraphrase-multilingual-mpnet-base-v2
+  min_topic_size: 5
+  n_neighbors: 15
+  n_components: 5
+  min_cluster_size: 5
+  min_samples: 3
+  top_n_words: 10
+  nr_topics: auto 
+  language: arabic
+  calculate_probabilities: true
+  max_seq_length: 128
+  batch_size: 32
+  device: cuda  
+  seed: 42
+  shuffle_seed: 101
+  ngram_range: [1, 2]
+  min_df: 2
+  max_df: 0.95
+  mmr_diversity: 0.3
+
+training:
+  min_words: 60            
+  sections: []    
+  label_topics: false
+
+llm:
+  model: openai/google/gemini-2.5-flash
+  base_url: null 
+  temperature: 0.2
+  max_retries: 3
+  timeout: 60
+  max_headlines: 8
