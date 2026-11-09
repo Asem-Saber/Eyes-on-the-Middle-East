@@ -9,3 +9,6 @@ wheels/
 data/
 docs/
 logs/
+models/
+.env
+.env
