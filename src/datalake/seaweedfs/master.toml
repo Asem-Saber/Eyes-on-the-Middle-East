@@ -1,0 +1,3 @@
+# Master configuration for the news data lake.
+# Keep SeaweedFS defaults until workload-specific tuning is needed.
+# Bucket provisioning is handled by data_lake.init_storage.

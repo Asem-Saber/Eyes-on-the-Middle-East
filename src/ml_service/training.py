@@ -40,7 +40,8 @@ class TopicTrainer:
         self.engine = TopicEngine()
 
     def load_corpus(self) -> list[CorpusItem]:
-        records = json.loads(OUTPUT_FILE.read_text(encoding="utf-8"))
+        from src.scraper.storage import load_existing_articles
+        records = load_existing_articles()
         random.Random(SHUFFLE_SEED).shuffle(records)
         logger.info("Loaded %d articles from %s", len(records), OUTPUT_FILE)
 

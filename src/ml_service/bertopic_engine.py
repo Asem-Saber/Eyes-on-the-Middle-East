@@ -34,6 +34,7 @@ from src.config import (
     TOP_N_WORDS,
 )
 from src.schemas import OUTLIER_TOPIC, TopicAssignment, TopicSummary
+from src.ml_service.device import resolve_device
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +49,7 @@ class TopicEngine:
         self.model: BERTopic | None = None
 
         logger.info("Loading embedding model %s", EMBEDDING_MODEL)
-        self.embedder = SentenceTransformer(EMBEDDING_MODEL, device=EMBED_DEVICE)
+        self.embedder = SentenceTransformer(EMBEDDING_MODEL, device=resolve_device(EMBED_DEVICE))
 
         self.embedder.max_seq_length = MAX_SEQ_LENGTH
         logger.info(

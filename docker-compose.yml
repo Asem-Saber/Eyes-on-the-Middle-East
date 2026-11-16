@@ -1,0 +1,80 @@
+services:
+  seaweedfs:
+    image: chrislusf/seaweedfs:latest
+    command: ["mini", "-dir=/data"]
+    restart: unless-stopped
+
+    environment:
+      AWS_ACCESS_KEY_ID: ${SEAWEEDFS_ACCESS_KEY}
+      AWS_SECRET_ACCESS_KEY: ${SEAWEEDFS_SECRET_KEY}
+
+    ports:
+      - "127.0.0.1:8333:8333"
+      - "127.0.0.1:8888:8888"
+      - "127.0.0.1:9333:9333"
+
+    volumes:
+      - seaweedfs_data:/data
+
+  airflow:
+    build:
+      context: .
+      dockerfile: src/infrastructure/docker/Dockerfile.airflow
+
+    command: standalone
+    restart: unless-stopped
+    init: true
+    shm_size: "1gb"
+
+    depends_on:
+      - seaweedfs
+      - news-postgres
+
+    environment:
+      AIRFLOW_HOME: /opt/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+      AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_USERS: "admin:admin"
+
+      SEAWEEDFS_ENDPOINT_URL: http://seaweedfs:8333
+      SEAWEEDFS_ACCESS_KEY: ${SEAWEEDFS_ACCESS_KEY}
+      SEAWEEDFS_SECRET_KEY: ${SEAWEEDFS_SECRET_KEY}
+      SEAWEEDFS_RAW_BUCKET: news-raw
+      SEAWEEDFS_PROCESSED_BUCKET: news-processed
+      SEAWEEDFS_AFTER_LLM_BUCKET: news-after-llm
+      DWH_HOST: news-postgres
+      DWH_PORT: "5432"
+
+    ports:
+      - "127.0.0.1:8081:8080"
+
+    volumes:
+      - airflow_home:/opt/airflow
+      - ./src/orchestration/dags:/opt/airflow/dags:ro
+      - ./src:/opt/news-project/src:ro
+      - ./config:/opt/news-project/config:ro
+      - ./data:/opt/news-project/data
+      - ./logs:/opt/news-project/logs
+      - ./models:/opt/news-project/models
+    
+  news-postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: news_dwh
+      POSTGRES_USER: news_admin
+      POSTGRES_PASSWORD: postgres_password
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - news_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U news_admin -d news_dwh"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  seaweedfs_data:
+  airflow_home:
+  news_postgres_data:

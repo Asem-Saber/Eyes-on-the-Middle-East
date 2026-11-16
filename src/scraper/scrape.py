@@ -12,7 +12,7 @@ from src.config import (
     setup_logging,
 )
 from src.scraper.driver import get_driver, accept_cookies
-from src.scraper.storage import load_existing_articles, save_articles
+from src.scraper.storage import load_existing_articles, save_articles,upload_raw_snapshot
 from src.scraper.utils import (
     complete_links,
     deduplicate,
@@ -83,12 +83,14 @@ def run_scraper() -> None:
 
         logging.info(f"Done! Returning {len(all_articles)} articles from {DEFAULT_START_DATE.year} onwards.")
 
+        upload_raw_snapshot(all_articles)
         save_articles(all_articles)
         logging.info(f"Scraping complete. Total articles saved: {len(all_articles)}")
 
     except Exception as e:
         logging.error(f"Scraper failed with a critical error: {e}", exc_info=True)
         print(f"Critical Error encountered. Check {LOG_FILE} for details.")
+        raise
 
     finally:
         logging.info("--- Scraper Stopped ---\n")

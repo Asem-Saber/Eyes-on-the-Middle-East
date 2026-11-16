@@ -7,6 +7,7 @@ from typing import Iterable, Sequence
 import litellm
 
 from src.config import (
+    get_setting,
     LLM_BASE_URL,
     LLM_MAX_HEADLINES,
     LLM_MAX_RETRIES,
@@ -80,6 +81,8 @@ def label_topic(keywords: Sequence[str], headlines: Sequence[str]) -> TopicLabel
             num_retries=LLM_MAX_RETRIES,
             timeout=LLM_TIMEOUT,
             api_base=LLM_BASE_URL,
+            api_key=get_setting("LLM_API_KEY", get_setting("OPENAI_API_KEY",
+                    get_setting("GEMINI_API_KEY", get_setting("GOOGLE_API_KEY")))),
         )
         return TopicLabel.model_validate_json(_unfence(response.choices[0].message.content))
     except Exception as exc:

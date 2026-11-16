@@ -6,11 +6,9 @@ from pathlib import Path
 from typing import Any, Dict, Union
 
 import yaml
-from dotenv import load_dotenv
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
-load_dotenv(PROJECT_ROOT / ".env", override=False)
 
 CONFIG_PATH = Path(os.getenv("CONFIG_PATH") or PROJECT_ROOT / "config" / "config.yml")
 
@@ -29,13 +27,26 @@ def load_yaml_config(path: Path = CONFIG_PATH) -> Dict[str, Any]:
     return config
 
 
-def _env(name: str, default: Any = None) -> Any:
-    """Non-empty environment value, else the default."""
-    value = os.getenv(name)
-    return value if value else default
-
-
 CONFIG = load_yaml_config()
+
+
+def get_setting(name: str, default: Any = None) -> Any:
+    """Resolve deployment overrides, then YAML settings, then defaults."""
+    value = os.getenv(name)
+    if value:
+        return value
+    value = CONFIG.get("environment", {}).get(name)
+    return value if value not in (None, "") else default
+
+
+def compose_environment() -> dict[str, str]:
+    """Build a child-process environment without mutating this process."""
+    values = {name: str(value) for name, value in CONFIG.get("environment", {}).items()
+              if value is not None}
+    return {**values, **os.environ}
+
+
+_env = get_setting
 
 PATHS_CONFIG = CONFIG.get("paths", {})
 SCRAPER_CONFIG = CONFIG.get("scraper", {})
