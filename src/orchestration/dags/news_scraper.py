@@ -21,9 +21,20 @@ with DAG(
     scrape_and_upload = BashOperator(
         task_id="scrape_and_upload",
         bash_command=(
-            "/opt/scraper-venv/bin/python -u -m src.scraper.main"
+            "/opt/scraper-venv/bin/python -u -m src.scraper.scrape"
         ),
         cwd="/opt/news-project",
         append_env=True,
         do_xcom_push=False,
     )
+
+    process_and_upload = BashOperator(
+        task_id="process_and_upload",
+        bash_command="/opt/scraper-venv/bin/python -u -m src.processing.processing",
+        cwd="/opt/news-project",
+        append_env=True,
+        do_xcom_push=False,
+        trigger_rule="all_success",
+    )
+
+    scrape_and_upload >> process_and_upload

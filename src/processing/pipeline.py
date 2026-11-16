@@ -6,12 +6,13 @@ from .normalizer import normalize_text
 from .quality import clean_text, clean_paragraphs, check_quality
 
 
-def process_articles(records: list, *, min_words: int = 20, min_arabic_ratio: float = 0.3) -> dict:
+def process_articles(records: list, *, min_words: int = 20, min_arabic_ratio: float = 0.3,
+                     seen: tuple[set, set] | None = None) -> dict:
     """Rebuild Silver from the scraper's cumulative snapshot, deterministically."""
     if min_words < 1 or not 0 <= min_arabic_ratio <= 1:
         raise ValueError("invalid quality thresholds")
     accepted, rejected = [], []
-    seen_ids, seen_hashes = set(), set()
+    seen_ids, seen_hashes = seen if seen is not None else (set(), set())
     duplicates = 0
     for index, record in enumerate(records):
         try:
@@ -38,14 +39,8 @@ def process_articles(records: list, *, min_words: int = 20, min_arabic_ratio: fl
             except (ValueError, TypeError):
                 raise ValueError("missing or invalid publication date") from None
             summary = record.get("Summary", "No Summary")
-            publisher = record.get("Publisher", "")
-            topics = record.get("Topics", [])
-            sources = record.get("Sources", [])
-            if not isinstance(summary, str) or not isinstance(publisher, str):
-                raise ValueError("Summary and Publisher must be strings")
-            if not all(isinstance(values, list) and all(isinstance(v, str) for v in values)
-                       for values in (topics, sources)):
-                raise ValueError("Topics and Sources must be lists of strings")
+            if not isinstance(summary, str):
+                raise ValueError("Summary must be a string")
             topic_id = record.get("topic_id")
             topic_label = record.get("topic_label")
             if topic_id is not None and type(topic_id) is not int:
@@ -70,9 +65,6 @@ def process_articles(records: list, *, min_words: int = 20, min_arabic_ratio: fl
                 "Headline": clean_text(headline),
                 "Summary": clean_text(summary),
                 "Full_Content": paragraphs,
-                "Publisher": publisher,
-                "Topics": list(topics),
-                "Sources": list(sources),
                 "Date": f"{publication_date.day}/{publication_date.month}/{publication_date.year}",
                 "topic_id": topic_id,
                 "topic_label": topic_label,

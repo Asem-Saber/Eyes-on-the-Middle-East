@@ -1,6 +1,5 @@
 import time
 import logging
-import os
 from contextlib import contextmanager
 
 from selenium import webdriver
@@ -11,7 +10,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.common.exceptions import TimeoutException
 
-from src.config import HEADLESS, PAGE_LOAD_TIMEOUT, USER_AGENT
+from src.config import HEADLESS, PAGE_LOAD_TIMEOUT, USER_AGENT, get_setting
 
 
 def setup_driver() -> webdriver.Chrome:
@@ -29,13 +28,13 @@ def setup_driver() -> webdriver.Chrome:
     options.add_argument(f"user-agent={USER_AGENT}")
 
     # Use the browser installed inside Docker when configured.
-    browser_path = os.getenv("BROWSER_BINARY_PATH")
+    browser_path = get_setting("BROWSER_BINARY_PATH")
     if browser_path:
         options.binary_location = browser_path
 
     # Use the installed ChromeDriver inside Docker.
     # Otherwise, let Selenium Manager resolve it locally.
-    driver_path = os.getenv("CHROMEDRIVER_PATH")
+    driver_path = get_setting("CHROMEDRIVER_PATH")
 
     if driver_path:
         driver = webdriver.Chrome(

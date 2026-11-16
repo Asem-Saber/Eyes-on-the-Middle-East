@@ -8,24 +8,33 @@ from src.config import OUTPUT_FILE, DATA_DIR
 
 
 def load_existing_articles(file_path: Union[Path, str] = OUTPUT_FILE) -> List[Dict[str, Any]]:
-    """Loads previously saved articles from disk."""
+    from src.datalake.partitions import load_local, decode_records
     path = Path(file_path)
-    if path.exists():
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return []
+    if path == Path(OUTPUT_FILE):
+        root = path.parent / "raw" / "aljazeera"
+        if any(root.glob("year=*/month=*/articles.json")) or (root / "undated/articles.json").exists():
+            return load_local(root)
+        return decode_records(path.read_text(encoding="utf-8")) if path.exists() else []
+    return decode_records(path.read_text(encoding="utf-8")) if path.exists() else []
 
 
 def save_articles(articles: List[Dict[str, Any]], file_path: Union[Path, str] = OUTPUT_FILE) -> None:
-    """Atomically serializes article records to formatted JSON."""
+    from src.datalake.partitions import load_local, group_articles, merge_articles, write_json
     path = Path(file_path)
-    path.parent.mkdir(parents=True, exist_ok=True)
+    if path != Path(OUTPUT_FILE):
+        write_json(path, articles)
+        return
+    root = path.parent / "raw" / "aljazeera"
+    groups = group_articles(merge_articles(load_existing_articles(file_path=path), articles))
+    # Empty old partitions if an article's corrected date moved it elsewhere.
+    for previous in root.glob("year=*/month=*/articles.json"):
+        groups.setdefault(previous.parent.relative_to(root).as_posix(), [])
+    if (root / "undated/articles.json").exists():
+        groups.setdefault("undated", [])
+    for partition, records in groups.items():
+        write_json(root / partition / "articles.json", records)
+    logging.info("Saved %s monthly Bronze partitions", len(groups))
 
-    temp_file = path.with_suffix(".tmp")
-    with open(temp_file, "w", encoding="utf-8") as f:
-        json.dump(articles, f, indent=2, ensure_ascii=False, default=str)
-    os.replace(temp_file, path)
-    logging.info(f"Saved {len(articles)} articles to {path}")
 
 def upload_raw_snapshot(articles: List[Dict[str, Any]]) -> str:
     """Upload a full raw snapshot to SeaweedFS, without changing article fields."""
@@ -34,23 +43,21 @@ def upload_raw_snapshot(articles: List[Dict[str, Any]]) -> str:
 
     import boto3
     from botocore.config import Config
-    from dotenv import load_dotenv
+    from src.config import get_setting
 
-    from src.config import PROJECT_ROOT
 
     if not articles:
         logging.info("No articles to upload.")
         return ""
 
-    load_dotenv(PROJECT_ROOT / ".env")
 
-    bucket = os.getenv("SEAWEEDFS_RAW_BUCKET", "news-raw")
+    bucket = get_setting("SEAWEEDFS_RAW_BUCKET", "news-raw")
 
     client = boto3.client(
         "s3",
-        endpoint_url=os.environ["SEAWEEDFS_ENDPOINT_URL"],
-        aws_access_key_id=os.environ["SEAWEEDFS_ACCESS_KEY"],
-        aws_secret_access_key=os.environ["SEAWEEDFS_SECRET_KEY"],
+        endpoint_url=get_setting("SEAWEEDFS_ENDPOINT_URL"),
+        aws_access_key_id=get_setting("SEAWEEDFS_ACCESS_KEY"),
+        aws_secret_access_key=get_setting("SEAWEEDFS_SECRET_KEY"),
         region_name="us-east-1",
         config=Config(
             signature_version="s3v4",
@@ -67,28 +74,26 @@ def upload_raw_snapshot(articles: List[Dict[str, Any]]) -> str:
     now = datetime.now(timezone.utc)
     run_id = f"{now:%Y%m%dT%H%M%S}_{uuid4().hex}"
 
-    key = "aljazeera/articles.json"
+    from src.datalake.partitions import group_articles, load_remote, merge_articles
+    from botocore.exceptions import ClientError
 
-    body = json.dumps(
-        articles,
-        ensure_ascii=False,
-        default=str,
-    ).encode("utf-8")
-
-    client.put_object(
-        Bucket=bucket,
-        Key=key,
-        Body=body,
-        ContentType="application/json; charset=utf-8",
-        Metadata={
-            "run-id": run_id,
-            "record-count": str(len(articles)),
-            "snapshot-type": "full",
-        },
-    )
-
-    location = f"s3://{bucket}/{key}"
-    logging.info("Uploaded %s articles to %s", len(articles), location)
-    print(f"Uploaded {len(articles)} articles to {location}")
-
+    try:
+        existing = load_remote(client, bucket)
+    except ClientError as exc:
+        if exc.response.get("Error", {}).get("Code") not in ("NoSuchKey", "404"):
+            raise
+        existing = []
+    groups = group_articles(merge_articles(existing, articles))
+    for partition in group_articles(existing):
+        groups.setdefault(partition, [])
+    for partition, records in groups.items():
+        key = f"aljazeera/{partition}/articles.json"
+        client.put_object(
+            Bucket=bucket, Key=key,
+            Body=json.dumps(records, ensure_ascii=False, default=str).encode("utf-8"),
+            ContentType="application/json; charset=utf-8",
+            Metadata={"run-id": run_id, "record-count": str(len(records)), "snapshot-type": "monthly"},
+        )
+    location = f"s3://{bucket}/aljazeera/"
+    logging.info("Uploaded %s monthly Bronze partitions to %s", len(groups), location)
     return location
