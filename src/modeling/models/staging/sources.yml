@@ -1,0 +1,9 @@
+version: 2
+sources:
+  - name: news_staging
+    schema: staging
+    tables:
+      - name: enriched_articles
+        columns:
+          - name: article_id
+            data_tests: [unique, not_null]
