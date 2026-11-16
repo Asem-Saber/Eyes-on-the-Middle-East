@@ -1,21 +1,16 @@
-import os
-from pathlib import Path
 
 import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
-from dotenv import load_dotenv
-
-
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+from src.config import get_setting
 
 
 def create_client():
     return boto3.client(
         "s3",
-        endpoint_url=os.environ["SEAWEEDFS_ENDPOINT_URL"],
-        aws_access_key_id=os.environ["SEAWEEDFS_ACCESS_KEY"],
-        aws_secret_access_key=os.environ["SEAWEEDFS_SECRET_KEY"],
+        endpoint_url=get_setting("SEAWEEDFS_ENDPOINT_URL"),
+        aws_access_key_id=get_setting("SEAWEEDFS_ACCESS_KEY"),
+        aws_secret_access_key=get_setting("SEAWEEDFS_SECRET_KEY"),
         region_name="us-east-1",
         config=Config(
             signature_version="s3v4",
@@ -45,11 +40,11 @@ def ensure_bucket(client, bucket: str) -> None:
 
 
 def main() -> None:
-    load_dotenv(PROJECT_ROOT / ".env")
 
     buckets = (
-        os.getenv("SEAWEEDFS_RAW_BUCKET", "news-raw"),
-        os.getenv("SEAWEEDFS_PROCESSED_BUCKET", "news-processed"),
+        get_setting("SEAWEEDFS_RAW_BUCKET", "news-raw"),
+        get_setting("SEAWEEDFS_PROCESSED_BUCKET", "news-processed"),
+        get_setting("SEAWEEDFS_AFTER_LLM_BUCKET", "news-after-llm"),
     )
 
     client = create_client()
