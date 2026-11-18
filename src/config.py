@@ -6,9 +6,11 @@ from pathlib import Path
 from typing import Any, Dict, Union
 
 import yaml
+from dotenv import load_dotenv
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
+load_dotenv(PROJECT_ROOT / ".env", override=False)
 
 CONFIG_PATH = Path(os.getenv("CONFIG_PATH") or PROJECT_ROOT / "config" / "config.yml")
 
