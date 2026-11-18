@@ -9,5 +9,5 @@ def settings():
         "port": int(get_setting("DWH_PORT", config.get("port", 5433))),
         "dbname": get_setting("DWH_DATABASE", config.get("database", "news_dwh")),
         "user": get_setting("DWH_USER", config.get("user", "news_admin")),
-        "password": get_setting("DWH_PASSWORD", config.get("password", "postgres_password")),
+        "password": get_setting("DWH_PASSWORD", config.get("password")),
     }

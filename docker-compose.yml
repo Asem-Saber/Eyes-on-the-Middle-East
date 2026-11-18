@@ -44,6 +44,7 @@ services:
       SEAWEEDFS_AFTER_LLM_BUCKET: news-after-llm
       DWH_HOST: news-postgres
       DWH_PORT: "5432"
+      DWH_PASSWORD: ${DWH_PASSWORD}
 
     ports:
       - "127.0.0.1:8081:8080"
@@ -63,7 +64,7 @@ services:
     environment:
       POSTGRES_DB: news_dwh
       POSTGRES_USER: news_admin
-      POSTGRES_PASSWORD: postgres_password
+      POSTGRES_PASSWORD: ${DWH_PASSWORD}
     ports:
       - "127.0.0.1:5433:5432"
     volumes:

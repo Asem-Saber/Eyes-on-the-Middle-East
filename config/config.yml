@@ -52,17 +52,15 @@ llm:
   timeout: 60
   max_headlines: 8
 environment:
-  SEAWEEDFS_ACCESS_KEY: SEAWEEDFS_ACCESS_KEY
-  SEAWEEDFS_SECRET_KEY: SEAWEEDFS_SECRET_KEY
+  SEAWEEDFS_ACCESS_KEY:
+  SEAWEEDFS_SECRET_KEY:
   SEAWEEDFS_ENDPOINT_URL: http://localhost:8333
   SEAWEEDFS_RAW_BUCKET: news-raw
 
   SEAWEEDFS_AFTER_LLM_BUCKET: news-after-llm
-postgres:
-  NEWS_POSTGRES_PASSWORD: postgres_password
 warehouse:
   host: localhost
   port: 5433
   database: news_dwh
   user: news_admin
-  password: postgres_password
+  password:
