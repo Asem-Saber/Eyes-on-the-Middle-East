@@ -7,7 +7,8 @@ on:
             - v2-production
             - feat/v2-scraper-ingestion
             - feat/v2-data-pipline
-            - feat/topic-modeling
+            - feat/topic-modeling 
+            - feat/api
         paths-ignore:
             - "**.md"
     pull_request:
