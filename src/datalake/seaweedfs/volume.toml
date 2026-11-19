@@ -1,0 +1,3 @@
+# Keep disk I/O probing disabled for the current local deployment.
+[volume.disk.io]
+probe = false

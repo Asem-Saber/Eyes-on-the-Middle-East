@@ -1,0 +1,16 @@
+name: news_dwh
+version: '1.0.0'
+config-version: 2
+profile: news_dwh
+model-paths: [models]
+macro-paths: [macros]
+test-paths: [tests]
+clean-targets: [target, dbt_packages]
+models:
+  news_dwh:
+    staging:
+      +schema: staging
+      +materialized: view
+    marts:
+      +schema: mart
+      +materialized: table

@@ -1,0 +1,55 @@
+[project]
+name = "eyes-on-the-middleeast-v2"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "beautifulsoup4>=4.15.0",
+    "boto3>=1.43.124",
+    "bentoml>=1.4,<2",
+    "litellm>=1.55",
+    "pydantic>=2.9",
+    "python-dotenv>=1.2.4",
+    "pyyaml>=6.0.3",
+    "selenium>=4.52.0",
+    "tenacity>=9.2.1",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+]
+ml = [
+    "bertopic>=0.16.4",
+    "sentence-transformers>=3.3",
+    "torch>=2.6,<2.7",
+    "umap-learn>=0.5.6",
+    "hdbscan>=0.8.38",
+    "scikit-learn>=1.4",
+    "safetensors>=0.4",
+    "pandas>=2.0",
+]
+
+
+api = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "psycopg[binary]>=3.2,<4",
+]
+warehouse = [
+    "dbt-postgres>=1.9,<2",
+    "psycopg[binary]>=3.2,<4",
+]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu124" }
+
+[[tool.uv.index]]
+name = "pytorch-cu124"
+url = "https://download.pytorch.org/whl/cu124"
+explicit = true
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
