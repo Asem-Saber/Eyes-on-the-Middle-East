@@ -1,0 +1,34 @@
+# syntax=docker/dockerfile:1.7
+
+FROM python:3.11-slim
+
+ENV UV_LINK_MODE=copy \
+    UV_PROJECT_ENVIRONMENT=/opt/api-venv \
+    PATH=/opt/api-venv/bin:$PATH \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/opt/news-project \
+    UV_HTTP_TIMEOUT=300
+
+COPY pyproject.toml uv.lock /tmp/uv-build/
+
+RUN --mount=type=cache,target=/root/.cache/uv \
+    pip install --no-cache-dir uv \
+    && uv sync \
+    --project /tmp/uv-build \
+    --frozen --no-dev --group api --no-install-project \
+    && rm -rf /tmp/uv-build
+
+WORKDIR /opt/news-project
+
+COPY src/__init__.py src/config.py src/schemas.py ./src/
+COPY src/api ./src/api
+COPY src/modeling/connection.py ./src/modeling/connection.py
+COPY src/modeling/__init__.py ./src/modeling/__init__.py
+COPY config/config.yml ./config/config.yml
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=5 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)"
+
+CMD ["uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
