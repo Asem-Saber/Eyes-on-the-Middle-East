@@ -1,0 +1,57 @@
+version: 2
+models:
+- name: dim_article
+  columns:
+  - name: article_key
+    data_tests:
+    - unique
+    - not_null
+- name: dim_topic
+  columns:
+  - name: topic_key
+    data_tests:
+    - unique
+    - not_null
+- name: dim_source
+  columns:
+  - name: source_key
+    data_tests:
+    - unique
+    - not_null
+- name: dim_date
+  columns:
+  - name: date_key
+    data_tests:
+    - unique
+    - not_null
+- name: fct_articles
+  columns:
+  - name: article_key
+    data_tests:
+    - unique
+    - not_null
+    - relationships:
+        arguments:
+          to: ref('dim_article')
+          field: article_key
+  - name: topic_key
+    data_tests:
+    - not_null
+    - relationships:
+        arguments:
+          to: ref('dim_topic')
+          field: topic_key
+  - name: source_key
+    data_tests:
+    - not_null
+    - relationships:
+        arguments:
+          to: ref('dim_source')
+          field: source_key
+  - name: published_date_key
+    data_tests:
+    - not_null
+    - relationships:
+        arguments:
+          to: ref('dim_date')
+          field: date_key

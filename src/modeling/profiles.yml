@@ -1,0 +1,12 @@
+news_dwh:
+  target: local
+  outputs:
+    local:
+      type: postgres
+      host: "{{ env_var('DBT_HOST') }}"
+      port: "{{ env_var('DBT_PORT') | int }}"
+      dbname: "{{ env_var('DBT_DATABASE') }}"
+      user: "{{ env_var('DBT_USER') }}"
+      password: "{{ env_var('DBT_PASSWORD') }}"
+      schema: staging
+      threads: 4

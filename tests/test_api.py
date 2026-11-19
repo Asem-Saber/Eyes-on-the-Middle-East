@@ -1,182 +1,244 @@
+from __future__ import annotations
+
+from datetime import date, datetime
+
 import pytest
-from tests.conftest import SAMPLE_ARTICLES, SAMPLE_TOPIC_META
-from api.models.article import Article
-from api.models.topic_meta import TopicMeta
+from fastapi.testclient import TestClient
+
+from src.api.core.database import get_connection
+from src.api.main import app
+from src.api.services.article_service import _filters
 
 
-@pytest.fixture()
-def seeded_client(client, engine):
-    from sqlalchemy.orm import sessionmaker
+class FakeCursor:
+    def __init__(self, connection: "FakeConnection") -> None:
+        self.connection = connection
 
-    Session = sessionmaker(bind=engine)
-    session = Session()
-    for a in SAMPLE_ARTICLES:
-        session.add(Article(**a))
-    for m in SAMPLE_TOPIC_META:
-        session.add(TopicMeta(**m))
-    session.commit()
-    session.close()
-    return client
+    def __enter__(self) -> "FakeCursor":
+        return self
 
+    def __exit__(self, *_: object) -> bool:
+        return False
 
-class TestRootAndHealth:
-    def test_root(self, client):
-        r = client.get("/")
-        assert r.status_code == 200
-        assert "Eyes on the Middle East" in r.json()["message"]
+    def execute(self, query: str, params=None) -> None:
+        # Collapse whitespace so assertions can match on SQL fragments.
+        self.connection.calls.append((" ".join(query.split()), params))
 
-    def test_health_responds(self, client):
-        r = client.get("/health")
-        assert r.status_code in (200, 503)
-        assert "status" in r.json()
+    def fetchall(self) -> list[dict]:
+        return self.connection.next_result()
+
+    def fetchone(self) -> dict | None:
+        rows = self.connection.next_result()
+        return rows[0] if rows else None
 
 
-class TestStatsEndpoint:
-    def test_stats_empty(self, client):
-        r = client.get("/api/v1/stats")
-        assert r.status_code == 200
-        data = r.json()
-        assert data["articles_scraped"] == 0
+class FakeConnection:
+    """Replays queued result sets in the order the service asks for them."""
 
-    def test_stats_with_data(self, seeded_client):
-        r = seeded_client.get("/api/v1/stats")
-        assert r.status_code == 200
-        data = r.json()
-        assert data["articles_scraped"] == 4
-        assert data["topics_discovered"] == 3
+    def __init__(self, *results: list[dict]) -> None:
+        self.results = list(results)
+        self.calls: list[tuple[str, object]] = []
 
+    def cursor(self) -> FakeCursor:
+        return FakeCursor(self)
 
-class TestTopicsEndpoints:
-    def test_list(self, seeded_client):
-        r = seeded_client.get("/api/v1/topics")
-        assert r.status_code == 200
-        topics = r.json()
-        assert len(topics) > 0
-        assert all("topic_id" in t and "name" in t and "keywords" in t for t in topics)
-
-    def test_distribution(self, seeded_client):
-        r = seeded_client.get("/api/v1/topics/distribution")
-        assert r.status_code == 200
-        data = r.json()
-        assert len(data) > 0
-        assert all("topic" in d and "count" in d for d in data)
-
-    def test_trends(self, seeded_client):
-        r = seeded_client.get("/api/v1/topics/trends")
-        assert r.status_code == 200
-
-    def test_detail_found(self, seeded_client):
-        r = seeded_client.get("/api/v1/topics/0")
-        assert r.status_code == 200
-        data = r.json()
-        assert data["topic_id"] == 0
-        assert data["name"] == "Ceasefire Negotiations"
-        assert "stats" in data
-        assert "contributors" in data
-        assert "trend" in data
-
-    def test_detail_not_found(self, seeded_client):
-        r = seeded_client.get("/api/v1/topics/9999")
-        assert r.status_code == 404
+    def next_result(self) -> list[dict]:
+        return self.results.pop(0) if self.results else []
 
 
-class TestArticlesEndpoints:
-    def test_paginated_default(self, seeded_client):
-        r = seeded_client.get("/api/v1/articles")
-        assert r.status_code == 200
-        data = r.json()
-        assert "articles" in data
-        assert "total" in data
-        assert "page" in data
-        assert "pages" in data
-        assert data["total"] == 3  # "No Headline" excluded
-
-    def test_paginated_with_limit(self, seeded_client):
-        r = seeded_client.get("/api/v1/articles?limit=1&page=1")
-        assert r.status_code == 200
-        data = r.json()
-        assert len(data["articles"]) == 1
-        assert data["pages"] == 3
-
-    def test_paginated_topic_filter(self, seeded_client):
-        r = seeded_client.get("/api/v1/articles?topic=1")
-        assert r.status_code == 200
-        data = r.json()
-        assert data["total"] == 1
-        assert data["articles"][0]["topic_id"] == 1
-
-    def test_paginated_search(self, seeded_client):
-        r = seeded_client.get("/api/v1/articles?search=Summit")
-        assert r.status_code == 200
-        data = r.json()
-        assert data["total"] == 1
-
-    def test_paginated_date_range(self, seeded_client):
-        r = seeded_client.get("/api/v1/articles?date_from=2024-07-01&date_to=2024-07-31")
-        assert r.status_code == 200
-        data = r.json()
-        assert data["total"] == 2
-
-    def test_recent(self, seeded_client):
-        r = seeded_client.get("/api/v1/articles/recent")
-        assert r.status_code == 200
-        articles = r.json()
-        assert len(articles) <= 10
-        assert all(a["headline"] != "No Headline" for a in articles)
-
-    def test_recent_limit(self, seeded_client):
-        r = seeded_client.get("/api/v1/articles/recent?limit=1")
-        assert r.status_code == 200
-        assert len(r.json()) == 1
-
-    def test_monthly_volume(self, seeded_client):
-        r = seeded_client.get("/api/v1/articles/monthly-volume")
-        assert r.status_code == 200
-        data = r.json()
-        assert len(data) > 0
-        assert all("month" in d and "count" in d for d in data)
-
-    def test_detail_found(self, seeded_client):
-        r = seeded_client.get("/api/v1/articles/abc123")
-        assert r.status_code == 200
-        data = r.json()
-        assert data["headline"] == "Gaza Ceasefire Talks Resume"
-        assert data["full_content"] == ["Paragraph 1", "Paragraph 2"]
-
-    def test_detail_not_found(self, seeded_client):
-        r = seeded_client.get("/api/v1/articles/nonexistent")
-        assert r.status_code == 404
+def client_for(connection: FakeConnection) -> TestClient:
+    app.dependency_overrides[get_connection] = lambda: connection
+    return TestClient(app)
 
 
-class TestAuthorsEndpoint:
-    def test_top_authors(self, seeded_client):
-        r = seeded_client.get("/api/v1/authors/top")
-        assert r.status_code == 200
-        data = r.json()
-        assert len(data) > 0
-        assert data[0]["author"] == "Ahmed Ali"
-        assert data[0]["count"] == 2
-
-    def test_top_authors_excludes_unknown(self, seeded_client):
-        r = seeded_client.get("/api/v1/authors/top")
-        authors = [d["author"] for d in r.json()]
-        assert "Unknown" not in authors
-
-    def test_top_authors_limit(self, seeded_client):
-        r = seeded_client.get("/api/v1/authors/top?limit=1")
-        assert r.status_code == 200
-        assert len(r.json()) == 1
+@pytest.fixture(autouse=True)
+def _clear_overrides():
+    yield
+    app.dependency_overrides.clear()
 
 
-class TestValidation:
-    def test_articles_page_must_be_positive(self, seeded_client):
-        r = seeded_client.get("/api/v1/articles?page=0")
-        assert r.status_code == 422
+def params_for(connection: FakeConnection, fragment: str) -> dict:
+    """The parameters of the first query containing `fragment`."""
+    for query, params in connection.calls:
+        if fragment in query:
+            return params or {}
+    raise AssertionError(f"No query contained {fragment!r}")
 
-    def test_articles_limit_max_100(self, seeded_client):
-        r = seeded_client.get("/api/v1/articles?limit=200")
-        assert r.status_code == 422
 
-    def test_authors_limit_max_50(self, seeded_client):
-        r = seeded_client.get("/api/v1/authors/top?limit=100")
-        assert r.status_code == 422
+# ── stats ───────────────────────────────────────────────────────────
+
+def test_stats_maps_the_row_onto_the_contract():
+    conn = FakeConnection([{
+        "articles_total": 5154, "topics_total": 85, "sources_total": 1,
+        "outlier_articles": 499, "coverage_start": date(2026, 5, 23),
+        "coverage_end": date(2026, 11, 9),
+        "last_loaded_at": datetime(2026, 11, 19, 9, 30),
+    }])
+    body = client_for(conn).get("/api/v1/stats/").json()
+
+    assert body["articles_total"] == 5154
+    assert body["coverage_start"] == "2026-05-23"
+    assert body["outlier_articles"] == 499
+
+
+def test_stats_on_an_empty_mart_returns_zeros_not_nulls():
+    """An unbuilt warehouse aggregates to a single all-null row, not no row."""
+    conn = FakeConnection([{
+        "articles_total": 0, "topics_total": None, "sources_total": None,
+        "outlier_articles": None, "coverage_start": None,
+        "coverage_end": None, "last_loaded_at": None,
+    }])
+    body = client_for(conn).get("/api/v1/stats/").json()
+
+    assert body["articles_total"] == 0
+    assert body["topics_total"] == 0
+    assert body["coverage_start"] is None
+
+
+# ── articles ────────────────────────────────────────────────────────
+
+ARTICLE_ROW = {
+    "article_id": "0ceba5fe91b1", "headline": "عنوان", "summary": "ملخص",
+    "url": "https://www.ajnet.me/politics/x", "published_date": date(2026, 11, 9),
+    "source_name": "Al Jazeera", "topic_id": 75, "topic_label": "الأردن",
+    "word_count": 420,
+}
+
+
+def test_articles_pagination_arithmetic():
+    conn = FakeConnection([{"total": 25}], [ARTICLE_ROW])
+    body = client_for(conn).get("/api/v1/articles/?page=2&limit=8").json()
+
+    assert body["total"] == 25
+    assert body["page"] == 2
+    assert body["pages"] == 4  # ceil(25 / 8)
+    assert params_for(conn, "limit %(limit)s")["offset"] == 8
+
+
+def test_articles_without_filters_builds_no_where_clause():
+    conn = FakeConnection([{"total": 0}], [])
+    client_for(conn).get("/api/v1/articles/")
+
+    count_query = next(q for q, _ in conn.calls if "count(*)" in q)
+    assert " where " not in count_query
+
+
+def test_articles_filters_reach_the_query():
+    conn = FakeConnection([{"total": 1}], [ARTICLE_ROW])
+    client_for(conn).get(
+        "/api/v1/articles/?search=غزة&date_from=2026-01-01&date_to=2026-12-31"
+    )
+
+    params = params_for(conn, "count(*)")
+    assert params["search"] == "%غزة%"
+    assert params["date_from"] == "2026-01-01"
+    assert params["date_to"] == "2026-12-31"
+
+
+def test_topic_zero_is_a_real_filter_not_a_missing_one():
+    """Topic 0 is the largest cluster; a falsy check would silently drop it."""
+    conn = FakeConnection([{"total": 1}], [ARTICLE_ROW])
+    client_for(conn).get("/api/v1/articles/?topic=0")
+
+    assert params_for(conn, "count(*)")["topic_id"] == 0
+
+
+def test_article_detail_returns_404_when_absent():
+    conn = FakeConnection([])
+    assert client_for(conn).get("/api/v1/articles/nope").status_code == 404
+
+
+def test_article_detail_tolerates_a_null_body():
+    row = {**ARTICLE_ROW, "full_content": None, "paragraph_count": 0,
+           "topic_summary": None, "model_version": "v1", "is_outlier": False}
+    conn = FakeConnection([row])
+    body = client_for(conn).get("/api/v1/articles/0ceba5fe91b1").json()
+
+    assert body["full_content"] == []
+
+
+@pytest.mark.parametrize("query", ["?page=0", "?limit=0", "?limit=5000"])
+def test_out_of_range_paging_is_rejected(query: str):
+    conn = FakeConnection([{"total": 0}], [])
+    assert client_for(conn).get(f"/api/v1/articles/{query}").status_code == 422
+
+
+# ── topics ──────────────────────────────────────────────────────────
+
+TOPIC_ROW = {
+    "topic_key": 1, "topic_id": 0, "model_version": "legacy-unversioned",
+    "topic_label": "تطورات الحرب في غزة", "topic_summary": None,
+    "is_outlier": False, "article_count": 1077,
+}
+
+
+def test_topics_include_outliers_toggles_the_where_clause():
+    with_outliers = FakeConnection([TOPIC_ROW])
+    client_for(with_outliers).get("/api/v1/topics/?include_outliers=true")
+    assert not any("not t.is_outlier" in q for q, _ in with_outliers.calls)
+
+    app.dependency_overrides.clear()
+    without = FakeConnection([TOPIC_ROW])
+    client_for(without).get("/api/v1/topics/?include_outliers=false")
+    assert any("not t.is_outlier" in q for q, _ in without.calls)
+
+
+def test_trends_are_keyed_by_topic_id():
+    """The dashboard pivots this object; an array would break the chart."""
+    conn = FakeConnection([
+        {"topic_id": 0, "iso_year": 2026, "iso_week": 7, "count": 12},
+        {"topic_id": 0, "iso_year": 2026, "iso_week": 8, "count": 15},
+        {"topic_id": 7, "iso_year": 2026, "iso_week": 8, "count": 3},
+    ])
+    body = client_for(conn).get("/api/v1/topics/trends?topics=2").json()
+
+    assert isinstance(body, dict)
+    assert set(body) == {"0", "7"}
+    assert [p["iso_week"] for p in body["0"]] == [7, 8]
+
+
+# ── cross-cutting ───────────────────────────────────────────────────
+
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "http://localhost:8080", "http://127.0.0.1:8080",
+        "http://localhost:5173", "http://127.0.0.1:5173",
+    ],
+)
+def test_both_spellings_of_each_dev_origin_are_allowed(origin: str):
+    """A browser treats localhost and 127.0.0.1 as different origins; the
+    dashboard silently failed every fetch when only one spelling was listed."""
+    conn = FakeConnection([{"articles_total": 0}])
+    response = client_for(conn).get("/api/v1/stats/", headers={"Origin": origin})
+
+    assert response.headers.get("access-control-allow-origin") == origin
+
+
+def test_health_reports_503_when_the_warehouse_is_unreachable(monkeypatch):
+    def boom():
+        raise RuntimeError('relation "fct_articles" does not exist')
+
+    monkeypatch.setattr("src.api.main.connect", boom)
+    response = TestClient(app).get("/health")
+
+    assert response.status_code == 503
+    assert response.json()["warehouse"] == "unreachable"
+
+
+# ── filter assembly, directly ───────────────────────────────────────
+
+def test_filters_emit_no_clause_when_everything_is_none():
+    where, params = _filters(None, None, None, None)
+    assert where == "" and params == {}
+
+
+def test_filters_wrap_search_for_ilike():
+    _, params = _filters(None, "gaza", None, None)
+    assert params["search"] == "%gaza%"
+
+
+def test_filters_and_clauses_together():
+    where, params = _filters(3, "x", "2026-01-01", None)
+    assert where.count(" and ") == 2
+    assert set(params) == {"topic_id", "search", "date_from"}

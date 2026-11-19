@@ -1,0 +1,51 @@
+service: "src.ml_service.service:TopicService"
+name: ajnet-topic-service
+description: |
+  BERTopic inference and LLM topic labeling for the Eyes on the Middle East
+  Arabic news corpus. Exposes /batch_infer, /label_topic and /info.
+
+labels:
+  owner: eyes-on-the-middleeast
+  stage: ml
+
+include:
+  - "src/__init__.py"
+  - "src/config.py"
+  - "src/schemas.py"
+  - "src/ml_service/**/*.py"
+  - "config/config.yml"
+exclude:
+  - "**/__pycache__/**"
+  - "**/*.pyc"
+
+python:
+  packages:
+    - bentoml>=1.4,<2
+    - pydantic>=2.9
+    - pyyaml>=6.0
+    - bertopic>=0.16.4
+    - sentence-transformers>=3.3
+    - torch>=2.4
+    - umap-learn>=0.5.6
+    - hdbscan>=0.8.38
+    - scikit-learn>=1.4
+    - numpy>=1.26,<3
+    - safetensors>=0.4
+    - pandas>=2.0
+    - litellm>=1.55
+  lock_packages: false
+
+docker:
+  distro: debian
+  python_version: "3.11"
+
+envs:
+  - name: TOPIC_MODEL_DIR
+    value: "/home/bentoml/bento/src/models/news_topics_model"
+  - name: CONFIG_PATH
+    value: "/home/bentoml/bento/src/config/config.yml"
+  - name: EMBED_DEVICE
+  - name: LLM_MODEL
+  - name: LLM_BASE_URL
+  - name: GEMINI_API_KEY
+  - name: OPENAI_API_KEY
