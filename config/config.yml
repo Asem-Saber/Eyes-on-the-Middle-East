@@ -59,8 +59,20 @@ environment:
 
   SEAWEEDFS_AFTER_LLM_BUCKET: news-after-llm
 warehouse:
-  host: localhost
+  host: 127.0.0.1
   port: 5433
   database: news_dwh
   user: news_admin
   password:
+
+api:
+  title: Eyes on the Middle East API
+  version: 2.0.0
+  mart_schema: mart
+  cors_origins:
+    - http://localhost:5173
+    - http://localhost:8080
+    - http://127.0.0.1:5173
+    - http://127.0.0.1:8080
+  default_page_size: 8
+  max_page_size: 100
