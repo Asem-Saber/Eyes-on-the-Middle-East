@@ -86,7 +86,6 @@ graph TD
     Enrich <--> Bento
     Enrich --> Gold --> Load --> Staging --> Dbt --> Mart
     Mart --> API --> UI
-    Mart --> PBI
     Bronze --> Train --> Models --> Bento
 ```
 
