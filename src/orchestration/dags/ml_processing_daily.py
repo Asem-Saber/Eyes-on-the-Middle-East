@@ -1,4 +1,3 @@
-"""Enrich articles, load staging and build the mart daily at midnight, Cairo."""
 from datetime import timedelta
 
 import pendulum
@@ -22,14 +21,13 @@ with DAG(
         task_id="enrich_and_upload",
         bash_command="/opt/scraper-venv/bin/python -u -m src.ml_service.processing",
         cwd="/opt/news-project",
-        env={"ML_SERVICE_URL": "http://host.docker.internal:3000"},
+        env={"ML_SERVICE_URL": "http://ml-serving:3000"},
         append_env=True,
         do_xcom_push=False,
     )
 
     load_staging = BashOperator(
         task_id="load_staging",
-        # Legacy records lack model_version; record versions take priority.
         bash_command=(
             "/opt/warehouse-venv/bin/python -u -m src.modeling.load "
             "--model-version legacy-unversioned"
@@ -43,7 +41,6 @@ with DAG(
         task_id="build_and_test_mart",
         bash_command="/opt/warehouse-venv/bin/python -u -m src.modeling.dbt build",
         cwd="/opt/news-project",
-        # Source is mounted read-only; dbt outputs use writable mounts.
         env={
             "DBT_LOG_PATH": "/opt/news-project/logs/dbt",
             "DBT_TARGET_PATH": "/opt/news-project/data/dbt/target",

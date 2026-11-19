@@ -6,16 +6,25 @@ dist/
 wheels/
 *.egg-info
 .venv
+.env
+.env.*
+!.env.example
+
 data/
 docs/
 logs/
 models/
-.env
-.env
+*.tmp
 src/modeling/target/
 src/modeling/logs/
 src/modeling/dbt_packages/
 
-# Track dbt SQL models while keeping trained model artifacts ignored.
+
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+node_modules/
 !src/modeling/models/
 !src/modeling/models/**

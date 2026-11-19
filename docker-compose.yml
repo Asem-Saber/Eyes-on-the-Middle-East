@@ -1,7 +1,64 @@
+x-ml-image: &ml-image
+  image: ${ML_TRAINER_IMAGE:-ajnet-ml:latest}
+  build:
+    context: .
+    dockerfile: src/infrastructure/docker/Dockerfile.ml
+
+x-airflow-common: &airflow-common
+  build:
+    context: .
+    dockerfile: src/infrastructure/docker/Dockerfile.airflow
+  restart: unless-stopped
+  init: true
+
+  environment: &airflow-common-env
+    AIRFLOW_HOME: /opt/airflow
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+    AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_USERS: "admin:admin"
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: >-
+      postgresql+psycopg2://airflow:${AIRFLOW_DB_PASSWORD}@airflow-postgres:5432/airflow
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-apiserver:8080/execution/
+    AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW_JWT_SECRET}
+    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: "true"
+
+    SEAWEEDFS_ENDPOINT_URL: http://seaweedfs:8333
+    SEAWEEDFS_ACCESS_KEY: ${SEAWEEDFS_ACCESS_KEY}
+    SEAWEEDFS_SECRET_KEY: ${SEAWEEDFS_SECRET_KEY}
+    SEAWEEDFS_RAW_BUCKET: news-raw
+    SEAWEEDFS_PROCESSED_BUCKET: news-processed
+    SEAWEEDFS_AFTER_LLM_BUCKET: news-after-llm
+    DWH_HOST: news-postgres
+    DWH_PORT: "5432"
+    DWH_PASSWORD: ${DWH_PASSWORD}
+
+    HOST_PROJECT_DIR: ${HOST_PROJECT_DIR}
+    ML_TRAINER_IMAGE: ajnet-ml:latest
+    HF_CACHE_DIR: ${HF_CACHE_DIR:-}
+
+  volumes:
+    - airflow_home:/opt/airflow
+    - ./src/orchestration/dags:/opt/airflow/dags:ro
+    - ./src:/opt/news-project/src:ro
+    - ./config:/opt/news-project/config:ro
+    - ./data:/opt/news-project/data
+    - ./logs:/opt/news-project/logs
+    - ./models:/opt/news-project/models
+
+  depends_on: &airflow-common-depends-on
+    airflow-postgres:
+      condition: service_healthy
+    news-postgres:
+      condition: service_healthy
+    seaweedfs:
+      condition: service_started
+
 services:
   seaweedfs:
     image: chrislusf/seaweedfs:latest
-    command: ["mini", "-dir=/data"]
+    command: [ "mini", "-dir=/data" ]
     restart: unless-stopped
 
     environment:
@@ -16,38 +73,31 @@ services:
     volumes:
       - seaweedfs_data:/data
 
-  airflow:
-    build:
-      context: .
-      dockerfile: src/infrastructure/docker/Dockerfile.airflow
+  airflow-init:
+    <<: *airflow-common
+    command: db migrate
+    restart: "no"
 
-    command: standalone
-    restart: unless-stopped
-    init: true
-    shm_size: "1gb"
-
-    depends_on:
-      - seaweedfs
-      - news-postgres
-
-    environment:
-      AIRFLOW_HOME: /opt/airflow
-      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
-      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
-      AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_USERS: "admin:admin"
-
-      SEAWEEDFS_ENDPOINT_URL: http://seaweedfs:8333
-      SEAWEEDFS_ACCESS_KEY: ${SEAWEEDFS_ACCESS_KEY}
-      SEAWEEDFS_SECRET_KEY: ${SEAWEEDFS_SECRET_KEY}
-      SEAWEEDFS_RAW_BUCKET: news-raw
-      SEAWEEDFS_PROCESSED_BUCKET: news-processed
-      SEAWEEDFS_AFTER_LLM_BUCKET: news-after-llm
-      DWH_HOST: news-postgres
-      DWH_PORT: "5432"
-
+  airflow-apiserver:
+    <<: *airflow-common
+    command: api-server
     ports:
       - "127.0.0.1:8081:8080"
+    healthcheck:
+      test: [ "CMD", "curl", "--fail", "http://localhost:8080/api/v2/version" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
 
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    shm_size: "1gb"
     volumes:
       - airflow_home:/opt/airflow
       - ./src/orchestration/dags:/opt/airflow/dags:ro
@@ -56,20 +106,138 @@ services:
       - ./data:/opt/news-project/data
       - ./logs:/opt/news-project/logs
       - ./models:/opt/news-project/models
-    
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: [ "CMD", "curl", "--fail", "http://localhost:8974/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-dag-processor:
+    <<: *airflow-common
+    command: dag-processor
+    healthcheck:
+      test: [ "CMD-SHELL", "airflow jobs check --job-type DagProcessorJob --local" ]
+      interval: 30s
+      timeout: 20s
+      retries: 5
+      start_period: 60s
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-triggerer:
+    <<: *airflow-common
+    command: triggerer
+    healthcheck:
+      test: [ "CMD-SHELL", "airflow jobs check --job-type TriggererJob --local" ]
+      interval: 30s
+      timeout: 20s
+      retries: 5
+      start_period: 60s
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  ml-trainer:
+    <<: *ml-image
+    profiles: [ "build" ]
+    command: [ "python", "-c", "import torch; print('cuda:', torch.cuda.is_available())" ]
+
+  ml-serving:
+    <<: *ml-image
+    restart: unless-stopped
+    command:
+      - bentoml
+      - serve
+      - src.ml_service.service:TopicService
+      - --host=0.0.0.0
+      - --port=3000
+    working_dir: /opt/news-project
+    environment:
+      PYTHONPATH: /opt/news-project
+      CONFIG_PATH: /opt/news-project/config/config.yml
+      TOPIC_MODEL_DIR: /opt/news-project/models/news_topics_model
+      EMBED_DEVICE: ${ML_SERVING_DEVICE:-cpu}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      LLM_BASE_URL: ${LLM_BASE_URL}
+    volumes:
+      - ./src:/opt/news-project/src:ro
+      - ./config:/opt/news-project/config:ro
+      - ./models:/opt/news-project/models:ro
+      - ./logs:/opt/news-project/logs
+      - ${HF_CACHE_DIR:-hf_cache}:/root/.cache/huggingface
+    ports:
+      - "127.0.0.1:3000:3000"
+    healthcheck:
+      test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:3000/healthz', timeout=5)" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 180s
+
+  api:
+    build:
+      context: .
+      dockerfile: src/infrastructure/docker/Dockerfile.api
+    restart: unless-stopped
+    environment:
+      DWH_HOST: news-postgres
+      DWH_PORT: "5432"
+      DWH_PASSWORD: ${DWH_PASSWORD}
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      news-postgres:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: src/frontend
+      dockerfile: ../infrastructure/docker/Dockerfile.frontend
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:80"
+    depends_on:
+      - api
+
+  airflow-postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: airflow
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: ${AIRFLOW_DB_PASSWORD}
+    volumes:
+      - airflow_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U airflow -d airflow" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   news-postgres:
     image: postgres:16
     restart: unless-stopped
     environment:
       POSTGRES_DB: news_dwh
       POSTGRES_USER: news_admin
-      POSTGRES_PASSWORD: postgres_password
+      POSTGRES_PASSWORD: ${DWH_PASSWORD}
     ports:
       - "127.0.0.1:5433:5432"
     volumes:
       - news_postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U news_admin -d news_dwh"]
+      test: [ "CMD-SHELL", "pg_isready -U news_admin -d news_dwh" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -77,4 +245,6 @@ services:
 volumes:
   seaweedfs_data:
   airflow_home:
+  airflow_postgres_data:
   news_postgres_data:
+  hf_cache:

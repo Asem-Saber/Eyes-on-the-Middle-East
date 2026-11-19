@@ -1,40 +1,38 @@
+# syntax=docker/dockerfile:1.7
+
 FROM apache/airflow:3.1.8-python3.11
 
 USER root
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        chromium \
-        chromium-driver \
+    chromium \
+    chromium-driver \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-RUN mkdir -p /opt/news-project /opt/scraper-venv /opt/ml-runtime /opt/ml-venv /opt/warehouse-venv \
-    && chown -R airflow:0 /opt/news-project /opt/scraper-venv /opt/ml-runtime /opt/ml-venv /opt/warehouse-venv
+RUN install -d -o airflow -g 0 \
+    /opt/news-project /opt/scraper-venv /opt/warehouse-venv
 
 USER airflow
 
-RUN pip install --no-cache-dir uv
+RUN pip install --no-cache-dir apache-airflow-providers-docker
 
-COPY --chown=airflow:0 requirements-scraper.txt /tmp/requirements-scraper.txt
+ENV UV_LINK_MODE=copy
 
-RUN uv venv /opt/scraper-venv \
+COPY --chown=airflow:0 requirements-scraper.txt pyproject.toml uv.lock /tmp/uv-build/
+
+RUN --mount=type=cache,target=/home/airflow/.cache/uv,uid=50000,gid=0 \
+    pip install --no-cache-dir uv \
+    && uv venv /opt/scraper-venv \
     && uv pip install \
-        --python /opt/scraper-venv/bin/python \
-        -r /tmp/requirements-scraper.txt
-
-# Keep ML dependencies separate from both Airflow and the scraping runtime.
-COPY --chown=airflow:0 pyproject.toml uv.lock /opt/ml-runtime/
-RUN UV_PROJECT_ENVIRONMENT=/opt/ml-venv uv sync \
-        --project /opt/ml-runtime \
-        --python /opt/scraper-venv/bin/python \
-        --frozen --no-dev --group ml --no-install-project
-
-# Isolate dbt/psycopg from Airflow's own dependency environment.
-RUN UV_PROJECT_ENVIRONMENT=/opt/warehouse-venv uv sync \
-        --project /opt/ml-runtime \
-        --python /opt/scraper-venv/bin/python \
-        --frozen --no-dev --group warehouse --no-install-project
+    --python /opt/scraper-venv/bin/python \
+    -r /tmp/uv-build/requirements-scraper.txt \
+    && UV_PROJECT_ENVIRONMENT=/opt/warehouse-venv uv sync \
+    --project /tmp/uv-build \
+    --python /opt/scraper-venv/bin/python \
+    --frozen --no-dev --group warehouse --no-install-project \
+    && rm -rf /tmp/uv-build
 
 ENV BROWSER_BINARY_PATH=/usr/bin/chromium
 ENV CHROMEDRIVER_PATH=/usr/bin/chromedriver

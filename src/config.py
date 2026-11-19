@@ -6,9 +6,11 @@ from pathlib import Path
 from typing import Any, Dict, Union
 
 import yaml
+from dotenv import load_dotenv
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
+load_dotenv(PROJECT_ROOT / ".env", override=False)
 
 CONFIG_PATH = Path(os.getenv("CONFIG_PATH") or PROJECT_ROOT / "config" / "config.yml")
 
@@ -130,6 +132,15 @@ LLM_TEMPERATURE = float(LLM_CONFIG.get("temperature", 0.2))
 LLM_MAX_RETRIES = int(LLM_CONFIG.get("max_retries", 3))
 LLM_TIMEOUT = float(LLM_CONFIG.get("timeout", 60))
 LLM_MAX_HEADLINES = int(LLM_CONFIG.get("max_headlines", 8))
+
+API_CONFIG = CONFIG.get("api", {})
+
+API_TITLE = API_CONFIG.get("title", "Eyes on the Middle East API")
+API_VERSION = str(API_CONFIG.get("version", "2.0.0"))
+MART_SCHEMA = _env("MART_SCHEMA", API_CONFIG.get("mart_schema", "mart"))
+API_CORS_ORIGINS = list(API_CONFIG.get("cors_origins") or [])
+API_DEFAULT_PAGE_SIZE = int(API_CONFIG.get("default_page_size", 8))
+API_MAX_PAGE_SIZE = int(API_CONFIG.get("max_page_size", 100))
 
 
 def setup_logging(log_file: Union[str, Path, None] = LOG_FILE, console: bool = False,
